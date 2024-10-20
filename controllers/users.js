@@ -1,5 +1,6 @@
 const usersRouter = require('express').Router()
 const User = require('../models/user')
+const Values = require('../models/values')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
@@ -148,6 +149,51 @@ usersRouter.post('/api/admin/logout/:userId', verifyToken, verifyAdmin, async (r
         response.json({ success: true, message: 'Sesión del usuario cerrada exitosamente' })
     } catch (error) {
         console.error('Error during user logout: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.get('/api/admin/values', verifyToken, verifyAdmin, async (request, response) => {
+    try {
+        const values = await Values.findOne()
+        if (!values) {
+            return response.json({ success: false, message: 'No se encontraron valores' })
+        }
+        response.json({ success: true, salarioMinimo: values.salarioMinimo, uma: values.uma })
+    } catch (error) {
+        console.error('Error fetching values: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.put('/api/admin/values', verifyToken, verifyAdmin, async (request, response) => {
+    const { salarioMinimo, uma } = request.body
+
+    try {
+        let values = await Values.findOne()
+        if (!values) {
+            values = new Values({ salarioMinimo, uma })
+        } else {
+            values.salarioMinimo = salarioMinimo
+            values.uma = uma
+        }
+        await values.save()
+        response.json({ success: true, message: 'Valores actualizados exitosamente' })
+    } catch (error) {
+        console.error('Error updating values: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.get('/api/values', async (request, response) => {
+    try {
+        const values = await Values.findOne()
+        if (!values) {
+            return response.status(404).json({ success: false, message: 'No se encontraron valores' })
+        }
+        response.json({ success: true, salarioMinimo: values.salarioMinimo, uma: values.uma })
+    } catch (error) {
+        console.error('Error fetching values: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
