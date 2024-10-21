@@ -44,16 +44,20 @@ usersRouter.post('/api/login', async (request, response) => {
         user.isLoggedIn = true
         await user.save()
 
-        response.json({ success: true, role: user.role, token })
+        response.json({ success: true, username: user.username, role: user.role, token })
     } catch (error) {
         console.error('Error during login: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.post('/api/logout', verifyToken, async (request, response) => {
+//Revisar opciones para cuando se vence el token
+
+usersRouter.post('/api/logout', /* verifyToken, */ async (request, response) => {
+    const username = request.body.username
+
     try { 
-        const user = await User.findById(request.userId)
+        const user = await User.findOne(request.username)
         if (user) {
             user.isLoggedIn = false
             await user.save()
@@ -76,7 +80,7 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
     }
 })
 
-usersRouter.post('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
+usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
     const { firstname, lastname, username, password, role } = request.body
 
     try {
@@ -134,7 +138,7 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
     }
 })
 
-usersRouter.post('/api/admin/logout/:userId', verifyToken, verifyAdmin, async (request, response) => {
+usersRouter.post('/api/admin/users/logout/:userId', verifyToken, verifyAdmin, async (request, response) => {
     const { userId } = request.params
 
     try {
@@ -221,21 +225,26 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
 })
 
 function verifyToken(request, response, next) {
-    const token = request.headers['authorization']?.split(' ')[1]
+    const token = request.headers['authorization']?.split(' ')[1];
   
     if (!token) {
-      return response.status(403).json({ success: false, message: 'No token provided' })
+      return response.status(403).json({ success: false, message: 'No token provided' });
     }
   
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
-        request.userId = decoded.userId
-        next()
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      request.userId = decoded.userId;
+      next();
     } catch (error) {
-        console.error('Error during token verification: ', error)
-        return response.status(401).json({ success: false, message: 'Unauthorized' })
+      if (error.name === 'TokenExpiredError') {
+        return response.status(401).json({ success: false, message: 'Token has expired. Please log in again.' });
+      } else {
+        console.error('Error during token verification: ', error);
+        return response.status(401).json({ success: false, message: 'Unauthorized' });
+      }
     }
-}
+  }
+  
 
 async function verifyAdmin(request, response, next) {
     try {
