@@ -57,7 +57,7 @@ usersRouter.post('/api/logout', /* verifyToken, */ async (request, response) => 
     const username = request.body.username
 
     try { 
-        const user = await User.findOne(request.username)
+        const user = await User.findOne({ username })
         if (user) {
             user.isLoggedIn = false
             await user.save()
@@ -134,6 +134,24 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
         response.json({ success: true, message: 'Usuario actualizado exitosamente' })
     } catch (error) {
         console.error('Error during user update: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (request, response) => {
+    const { id } = request.params
+
+    try {
+        const user = await User.findById(id)
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        await user.deleteOne()
+
+        response.json({ success: true, message: 'Usuario eliminado exitosamente' })
+    } catch (error) {
+        console.error('Error during user deletion: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })

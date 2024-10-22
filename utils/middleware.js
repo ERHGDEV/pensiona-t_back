@@ -31,8 +31,8 @@ const errorHandler = (error, request, response, next) => {
 
 const checkAndUpdateUserStatus = async (user) => {
     const currentDate = new Date()
-    if (currentDate > user.fechaTerminoVigencia && user.estatus === 'active') {
-      user.estatus = 'inactive'
+    if (currentDate > user.expiration && user.status === 'active') {
+      user.status = 'inactive'
       await user.save()
     }
     return user
