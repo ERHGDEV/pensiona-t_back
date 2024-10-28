@@ -81,7 +81,7 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
 })
 
 usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
-    const { firstname, lastname, username, password, role } = request.body
+    const { firstname, lastname, username, password, secretQuestion, secretAnswer, role } = request.body
 
     try {
         const existingUser = await User.findOne({ username })
@@ -99,6 +99,8 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
             lastname,
             username,
             password: hashedPassword,
+            secretQuestion,
+            secretAnswer,
             role,
             expiration
         })
@@ -242,6 +244,62 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
     }
 })
 
+usersRouter.post('/api/recovery/step1', async (request, response) => {
+    const { email } = request.body
+
+    try {
+        const user = await User.findOne({ username: email })
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        response.json({ success: true, secretQuestion: user.secretQuestion })
+    } catch (error) {
+        console.error('Error during recovery step 1:', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.post('/api/recovery/step2', async (request, response) => {
+    const { email, secretAnswer } = request.body
+
+    try {
+        const user = await User.findOne({ username: email })
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        if (user.secretAnswer !== secretAnswer) {
+            return response.json({ success: false, message: 'Respuesta incorrecta' })
+        }
+
+        response.json({ success: true, message: 'Respuesta correcta' })
+    } catch (error) {
+        console.error('Error during recovery step 2:', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.post('/api/recovery/step3', async (request, response) => {
+    const { email, newPassword } = request.body
+
+    try {
+        const user = await User.findOne({ username: email })
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10)
+        user.password = hashedPassword
+        await user.save()
+
+        response.json({ success: true, message: 'Contraseña actualizada exitosamente' })
+    } catch (error) {
+        console.error('Error during recovery step 3:', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
 function verifyToken(request, response, next) {
     const token = request.headers['authorization']?.split(' ')[1];
   
@@ -277,8 +335,8 @@ async function verifyAdmin(request, response, next) {
     }
 }
 
-/* usersRouter.post('/api/temporal-register', async (request, response) => {
-    const { firstname, lastname, username, password } = request.body
+usersRouter.post('/api/register', async (request, response) => {
+    const { firstname, lastname, username, password, secretQuestion, secretAnswer } = request.body
 
     try {
         const existingUser = await User.findOne({ username })
@@ -296,6 +354,8 @@ async function verifyAdmin(request, response, next) {
             lastname,
             username,
             password: hashedPassword,
+            secretQuestion,
+            secretAnswer,
             expiration
         })
 
@@ -306,6 +366,6 @@ async function verifyAdmin(request, response, next) {
         console.error('Error during registration: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
-}) */
+})
 
 module.exports = usersRouter
