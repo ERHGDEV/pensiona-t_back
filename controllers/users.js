@@ -244,6 +244,39 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
     }
 })
 
+usersRouter.post('/api/register', async (request, response) => {
+    const { firstname, lastname, username, password, secretQuestion, secretAnswer } = request.body
+
+    try {
+        const existingUser = await User.findOne({ username })
+        if (existingUser) {
+            return response.status(400).json({ success: false, message: 'Correo electrónico ya registrado' })
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10)
+
+        const currentDate = new Date()
+        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 7))
+
+        const newUser = new User({
+            firstname,
+            lastname,
+            username,
+            password: hashedPassword,
+            secretQuestion,
+            secretAnswer,
+            expiration
+        })
+
+        await newUser.save()
+
+        response.json({ success: true, message: 'Usuario registrado' })
+    } catch (error) {
+        console.error('Error during registration: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
 usersRouter.post('/api/recovery/step1', async (request, response) => {
     const { email } = request.body
 
@@ -319,7 +352,7 @@ function verifyToken(request, response, next) {
         return response.status(401).json({ success: false, message: 'Unauthorized' });
       }
     }
-  }
+}
   
 
 async function verifyAdmin(request, response, next) {
@@ -334,38 +367,5 @@ async function verifyAdmin(request, response, next) {
         response.status(500).json({ message: 'Error en el servidor' })
     }
 }
-
-usersRouter.post('/api/register', async (request, response) => {
-    const { firstname, lastname, username, password, secretQuestion, secretAnswer } = request.body
-
-    try {
-        const existingUser = await User.findOne({ username })
-        if (existingUser) {
-            return response.status(400).json({ success: false, message: 'Correo electrónico ya registrado' })
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10)
-
-        const currentDate = new Date()
-        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 7))
-
-        const newUser = new User({
-            firstname,
-            lastname,
-            username,
-            password: hashedPassword,
-            secretQuestion,
-            secretAnswer,
-            expiration
-        })
-
-        await newUser.save()
-
-        response.json({ success: true, message: 'Usuario registrado' })
-    } catch (error) {
-        console.error('Error during registration: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
-    }
-})
 
 module.exports = usersRouter
