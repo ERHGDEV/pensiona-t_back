@@ -5,70 +5,76 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
 
+const generateUniqueToken = (user) => {
+    return jwt.sign(
+      { userId: user._id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30m' }
+    )
+  }
+  
+  const invalidatePreviousToken = async (userId) => {
+    await User.findByIdAndUpdate(userId, { token: null })
+  }
+
 usersRouter.get('/', (request, response) => {
     response.send(`<h1> Pensiona-T </h1>`)
 })
 
 usersRouter.post('/api/login', async (request, response) => {
     const { username, password } = request.body
+  
+    try {
+      let user = await User.findOne({ username })
+  
+      if (!user) {
+        return response.json({ success: false, message: 'Usuario incorrecto' })
+      }
+  
+      user = await checkAndUpdateUserStatus(user)
+  
+      if (user.status === 'inactive') {
+        return response.json({ success: false, message: 'Usuario inactivo' })
+      }
+  
+      const isMatch = await bcrypt.compare(password, user.password)
+  
+      if (!isMatch) {
+        return response.json({ success: false, message: 'Contraseña incorrecta' })
+      }
+  
+      if (user.token) {
+        await invalidatePreviousToken(user._id)
+      }
+  
+      const token = generateUniqueToken(user)
+  
+      user.token = token
+      user.isLoggedIn = true
+      await user.save()
+  
+      response.json({ success: true, username: user.username, role: user.role, token })
+    } catch (error) {
+      console.error('Error durante el inicio de sesión: ', error)
+      response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+  })
+  
+  usersRouter.post('/api/logout', verifyToken, async (request, response) => {
+    const user = await User.findById(request.userId)
 
     try {
-        let user = await User.findOne({ username })
+      
+      user.isLoggedIn = false
+      await user.save()
 
-        if (!user) {
-            return response.json({ success: false, message: 'Usuario incorrecto' })
-        }
-
-        user = await checkAndUpdateUserStatus(user)
-
-        if (user.status === 'inactive') {
-            return response.json({ success: false, message: 'Usuario inactivo' })
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password)
-
-        if (!isMatch) {
-            return response.json({ success: false, message: 'Contraseña incorrecta' })
-        }
-
-        if (user.isLoggedIn) {
-            return response.json({ success: false, message: 'Ya existe una sesión activa' })
-        }
-
-        const token = jwt.sign(
-            { userId: user._id, username: user.username, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '30m' }
-        )
-
-        user.isLoggedIn = true
-        await user.save()
-
-        response.json({ success: true, username: user.username, role: user.role, token })
+      await invalidatePreviousToken(request.userId)
+      response.json({ success: true, message: 'Sesión cerrada' })
     } catch (error) {
-        console.error('Error during login: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
+      console.error('Error durante el cierre de sesión: ', error)
+      response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
-})
-
-//Revisar opciones para cuando se vence el token
-
-usersRouter.post('/api/logout', /* verifyToken, */ async (request, response) => {
-    const username = request.body.username
-
-    try { 
-        const user = await User.findOne({ username })
-        if (user) {
-            user.isLoggedIn = false
-            await user.save()
-        }
-
-        response.json({ success: true, message: 'Sesión cerrada' })
-    } catch (error) {
-        console.error('Error during logout: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
-    }
-})
+  })
 
 usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
     try {
@@ -92,7 +98,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
         const hashedPassword = await bcrypt.hash(password, 10)
 
         const currentDate = new Date()
-        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 15))
+        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
 
         const newUser = new User({
             firstname,
@@ -256,7 +262,7 @@ usersRouter.post('/api/register', async (request, response) => {
         const hashedPassword = await bcrypt.hash(password, 10)
 
         const currentDate = new Date()
-        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 7))
+        const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
 
         const newUser = new User({
             firstname,
@@ -333,26 +339,32 @@ usersRouter.post('/api/recovery/step3', async (request, response) => {
     }
 })
 
-function verifyToken(request, response, next) {
-    const token = request.headers['authorization']?.split(' ')[1];
+async function verifyToken(request, response, next) {
+    const token = request.headers['authorization']?.split(' ')[1]
   
     if (!token) {
-      return response.status(403).json({ success: false, message: 'No token provided' });
+      return response.status(403).json({ success: false, message: 'No se proporcionó token' })
     }
   
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      request.userId = decoded.userId;
-      next();
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      const user = await User.findById(decoded.userId)
+  
+      if (!user || user.token !== token) {
+        return response.status(401).json({ success: false, message: 'Token inválido. Por favor, inicie sesión nuevamente.' })
+      }
+  
+      request.userId = decoded.userId
+      next()
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
-        return response.status(401).json({ success: false, message: 'Token has expired. Please log in again.' });
+        return response.status(401).json({ success: false, message: 'El token ha expirado. Por favor, inicie sesión nuevamente.' })
       } else {
-        console.error('Error during token verification: ', error);
-        return response.status(401).json({ success: false, message: 'Unauthorized' });
+        console.error('Error durante la verificación del token: ', error)
+        return response.status(401).json({ success: false, message: 'No autorizado' })
       }
     }
-}
+  }
   
 
 async function verifyAdmin(request, response, next) {
