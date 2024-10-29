@@ -21,20 +21,17 @@ const userSchema = new mongoose.Schema({
     token: { type: String, default: null }
 })
 
-// Método para limpiar el token del usuario
 userSchema.methods.clearToken = function() {
     this.token = null;
     return this.save();
 }
 
-// Método para establecer un nuevo token
 userSchema.methods.setToken = function(token) {
     this.token = token;
     this.isLoggedIn = true;
     return this.save();
 }
 
-// Método para verificar si el token del usuario coincide
 userSchema.methods.verifyToken = function(token) {
     return this.token === token;
 }

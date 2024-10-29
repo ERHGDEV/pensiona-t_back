@@ -1,6 +1,7 @@
 const usersRouter = require('express').Router()
 const User = require('../models/user')
 const Values = require('../models/values')
+const LoginHistory = require('../models/loginHistory')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
@@ -9,7 +10,7 @@ const generateUniqueToken = (user) => {
     return jwt.sign(
       { userId: user._id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '30m' }
+      { expiresIn: '10m' }
     )
   }
   
@@ -28,18 +29,40 @@ usersRouter.post('/api/login', async (request, response) => {
       let user = await User.findOne({ username })
   
       if (!user) {
+        await LoginHistory.create({
+            username,
+            loginDate: new Date(),
+            ipAddress: request.ip,
+            success: false,
+        })
         return response.json({ success: false, message: 'Usuario incorrecto' })
       }
   
       user = await checkAndUpdateUserStatus(user)
   
       if (user.status === 'inactive') {
+        await LoginHistory.create({
+            userId: user._id,
+            username: user.username,
+            role: user.role,
+            loginDate: new Date(),
+            ipAddress: request.ip,
+            success: false,
+        })
         return response.json({ success: false, message: 'Usuario inactivo' })
       }
   
       const isMatch = await bcrypt.compare(password, user.password)
   
       if (!isMatch) {
+        await LoginHistory.create({
+            userId: user._id,
+            username: user.username,
+            role: user.role,
+            loginDate: new Date(),
+            ipAddress: request.ip,
+            success: false,
+        })
         return response.json({ success: false, message: 'Contraseña incorrecta' })
       }
   
@@ -52,6 +75,15 @@ usersRouter.post('/api/login', async (request, response) => {
       user.token = token
       user.isLoggedIn = true
       await user.save()
+
+      await LoginHistory.create({
+          userId: user._id,
+          username: user.username,
+          role: user.role,
+          loginDate: new Date(),
+          ipAddress: request.ip,
+          success: true,
+     })
   
       response.json({ success: true, username: user.username, role: user.role, token })
     } catch (error) {
