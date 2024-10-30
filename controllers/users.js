@@ -1,4 +1,6 @@
 const usersRouter = require('express').Router()
+const fetch = require('node-fetch')
+const cheerio = require('cheerio')
 const User = require('../models/user')
 const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
@@ -34,6 +36,7 @@ usersRouter.post('/api/login', async (request, response) => {
             loginDate: new Date(),
             ipAddress: request.ip,
             success: false,
+            reason: 'Usuario incorrecto'
         })
         return response.json({ success: false, message: 'Usuario incorrecto' })
       }
@@ -48,6 +51,7 @@ usersRouter.post('/api/login', async (request, response) => {
             loginDate: new Date(),
             ipAddress: request.ip,
             success: false,
+            reason: 'Usuario inactivo'
         })
         return response.json({ success: false, message: 'Usuario inactivo' })
       }
@@ -62,6 +66,7 @@ usersRouter.post('/api/login', async (request, response) => {
             loginDate: new Date(),
             ipAddress: request.ip,
             success: false,
+            reason: 'Contraseña incorrecta'
         })
         return response.json({ success: false, message: 'Contraseña incorrecta' })
       }
@@ -83,6 +88,7 @@ usersRouter.post('/api/login', async (request, response) => {
           loginDate: new Date(),
           ipAddress: request.ip,
           success: true,
+          reason: 'Inicio de sesión exitoso'
      })
   
       response.json({ success: true, username: user.username, role: user.role, token })
@@ -92,7 +98,7 @@ usersRouter.post('/api/login', async (request, response) => {
     }
   })
   
-  usersRouter.post('/api/logout', verifyToken, async (request, response) => {
+usersRouter.post('/api/logout', verifyToken, async (request, response) => {
     const user = await User.findById(request.userId)
 
     try {
@@ -106,7 +112,7 @@ usersRouter.post('/api/login', async (request, response) => {
       console.error('Error durante el cierre de sesión: ', error)
       response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
-  })
+})
 
 usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
     try {
@@ -119,12 +125,16 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
 })
 
 usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
-    const { firstname, lastname, username, password, secretQuestion, secretAnswer, role } = request.body
+    const { numeroConsar, firstname, username, password, secretQuestion, secretAnswer, role } = request.body
 
     try {
         const existingUser = await User.findOne({ username })
         if (existingUser) {
             return response.json({ success: false, message: 'Correo electrónico ya registrado' })
+        }
+        const existingConsar = await User.findOne({ numeroConsar })
+        if (existingConsar) {
+            return response.json({ success: false, message: 'Número CONSAR ya registrado' })
         }
 
         const hashedPassword = await bcrypt.hash(password, 10)
@@ -133,8 +143,8 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
 
         const newUser = new User({
+            numeroConsar,
             firstname,
-            lastname,
             username,
             password: hashedPassword,
             secretQuestion,
@@ -154,7 +164,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
 
 usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request, response) => {
     const { id } = request.params
-    const { firstname, lastname, username, role, expiration, status } = request.body
+    const { numeroConsar, firstname, username, role, expiration, status } = request.body
 
     try {
         const user = await User.findById(id)
@@ -162,8 +172,8 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
             return response.json({ success: false, message: 'Usuario no encontrado' })
         }
 
+        user.numeroConsar = numeroConsar
         user.firstname = firstname
-        user.lastname = lastname
         user.username = username
         user.role = role
         user.expiration = expiration
@@ -268,8 +278,8 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
         }
 
         response.json({
+            numeroConsar: user.numeroConsar,
             firstname: user.firstname,
-            lastname: user.lastname,
             username: user.username,
             role: user.role,
             expiration: user.expiration,
@@ -282,13 +292,60 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
     }
 })
 
+usersRouter.post('/api/verify-consar', async (req, res) => {
+    const { numeroConsar } = req.body
+
+    const url = 'http://www.apromotores.com.mx/siap-agentepromotor/redirectResultadoConsulta.do'
+    const data = new URLSearchParams({
+        numeroAgentePromotor: numeroConsar,
+        apellidoPaterno: '',
+        apellidoMaterno: '',
+        nombre: '',
+        mensajeError: '',
+        mensajeSinResultados: '',
+        fechaUltimaActualizacion: '',
+    })
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: data
+        })
+        
+        const html = await response.text()
+        const $ = cheerio.load(html)
+
+        let resultado = { estatus: '', nombre: '' }
+
+        $('td').each((index, element) => {
+            const text = $(element).text().trim()
+            if (text.includes('Nombre:')) resultado.nombre = text.split('Nombre:')[1].trim()
+            if (text.includes('Estatus:')) resultado.estatus = text.split('Estatus:')[1].trim()
+        })
+
+        if (!resultado.nombre || !resultado.estatus) {
+            return res.status(400).json({ success: false, message: 'No se encontraron resultados para el número CONSAR' })
+        }
+
+        res.json({ success: true, nombre: resultado.nombre, estatus: resultado.estatus })
+    } catch (error) {
+        console.error('Error al verificar el número CONSAR:', error)
+        res.status(500).json({ success: false, message: 'Error en el servidor al verificar el número CONSAR' })
+    }
+})
+
 usersRouter.post('/api/register', async (request, response) => {
-    const { firstname, lastname, username, password, secretQuestion, secretAnswer } = request.body
+    const { numeroConsar, firstname, username, password, secretQuestion, secretAnswer } = request.body
 
     try {
         const existingUser = await User.findOne({ username })
         if (existingUser) {
             return response.status(400).json({ success: false, message: 'Correo electrónico ya registrado' })
+        }
+        const existingConsar = await User.findOne({ numeroConsar })
+        if (existingConsar) {
+            return response.status(400).json({ success: false, message: 'Número CONSAR ya registrado' })
         }
 
         const hashedPassword = await bcrypt.hash(password, 10)
@@ -297,8 +354,8 @@ usersRouter.post('/api/register', async (request, response) => {
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
 
         const newUser = new User({
+            numeroConsar,
             firstname,
-            lastname,
             username,
             password: hashedPassword,
             secretQuestion,

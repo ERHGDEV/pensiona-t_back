@@ -25,6 +25,9 @@ const loginHistorySchema = new mongoose.Schema({
     type: Boolean,
     required: true,
   },
+  reason: {
+    type: String,
+  }
 })
 
 module.exports = mongoose.model('LoginHistory', loginHistorySchema)
