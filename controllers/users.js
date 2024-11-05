@@ -16,9 +16,9 @@ const generateUniqueToken = (user) => {
     )
   }
   
-  const invalidatePreviousToken = async (userId) => {
+const invalidatePreviousToken = async (userId) => {
     await User.findByIdAndUpdate(userId, { token: null })
-  }
+}
 
 usersRouter.get('/', (request, response) => {
     response.send(`<h1> Pensiona-T </h1>`)
@@ -81,22 +81,24 @@ usersRouter.post('/api/login', async (request, response) => {
       user.isLoggedIn = true
       await user.save()
 
-      await LoginHistory.create({
-          userId: user._id,
-          username: user.username,
-          role: user.role,
-          loginDate: new Date(),
-          ipAddress: request.ip,
-          success: true,
-          reason: 'Inicio de sesión exitoso'
-     })
+      if (user.username !== 'admin' && user.username !== 'a@gmail.com') {
+        await LoginHistory.create({
+            userId: user._id,
+            username: user.username,
+            role: user.role,
+            loginDate: new Date(),
+            ipAddress: request.ip,
+            success: true,
+            reason: 'Inicio de sesión exitoso'
+        })
+      }
   
       response.json({ success: true, username: user.username, role: user.role, token })
     } catch (error) {
       console.error('Error durante el inicio de sesión: ', error)
       response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
-  })
+})
   
 usersRouter.post('/api/logout', verifyToken, async (request, response) => {
     const user = await User.findById(request.userId)
