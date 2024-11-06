@@ -18,7 +18,9 @@ const userSchema = new mongoose.Schema({
     created: { type: Date, default: Date.now },
     isLoggedIn: { type: Boolean, default: false },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
-    token: { type: String, default: null }
+    token: { type: String, default: null },
+    verified: { type: Boolean, default: false },
+    verificationToken: { type: String }
 })
 
 userSchema.methods.clearToken = function() {

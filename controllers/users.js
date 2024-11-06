@@ -6,7 +6,12 @@ const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const config = require('../utils/config')
+const sgMail = require('@sendgrid/mail')
+const createVerificationEmail = require('../utils/emailTemplates').createVerificationEmail
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
+
+sgMail.setApiKey(config.SENDGRID_API_KEY)
 
 const generateUniqueToken = (user) => {
     return jwt.sign(
@@ -39,6 +44,19 @@ usersRouter.post('/api/login', async (request, response) => {
             reason: 'Usuario incorrecto'
         })
         return response.json({ success: false, message: 'Usuario incorrecto' })
+      }
+
+      if (!user.verified) {
+        await LoginHistory.create({
+            userId: user._id,
+            username: user.username,
+            role: user.role,
+            loginDate: new Date(),
+            ipAddress: request.ip,
+            success: false,
+            reason: 'Usuario no verificado'
+        })
+        return response.json({ success: false, message: 'Cuenta no verificada, revisa tu bandeja de entrada' })
       }
   
       user = await checkAndUpdateUserStatus(user)
@@ -81,7 +99,7 @@ usersRouter.post('/api/login', async (request, response) => {
       user.isLoggedIn = true
       await user.save()
 
-      if (user.username !== 'admin' && user.username !== 'a@gmail.com') {
+      if (user.username !== 'admin' && user.username !== 'a@gmail.com' && user.username !== 'erhgdev@gmail.com') {
         await LoginHistory.create({
             userId: user._id,
             username: user.username,
@@ -143,6 +161,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
 
         const currentDate = new Date()
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
+        const verificationToken = jwt.sign({ username }, process.env.JWT_SECRET, { expiresIn: '1d' })
 
         const newUser = new User({
             numeroConsar,
@@ -152,10 +171,22 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
             secretQuestion,
             secretAnswer,
             role,
-            expiration
+            expiration,
+            verificationToken
         })
 
         await newUser.save()
+        //actualizar a config.URL_FRONTEND
+        const verificationUrl = `http://localhost:5173/verify?token=${verificationToken}`
+
+        const verificationEmail = createVerificationEmail(firstname, username, verificationUrl)
+
+        try {
+            await sgMail.send(verificationEmail)
+        } catch (error) {
+            console.error('Error sending verification email: ', error)
+            return response.json({ success: false, message: 'Error al enviar el correo de verificación' })
+        }
 
         response.json({ success: true, message: 'Usuario creado exitosamente' })
     } catch (error) {
@@ -429,6 +460,44 @@ usersRouter.post('/api/recovery/step3', async (request, response) => {
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
+
+usersRouter.get('/api/verify', async (request, response) => {
+    const { token } = request.query
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+        const user = await User.findOne({ username: decoded.username })
+
+        if (!user) {
+            return response.status(404).json({ success: false, message: 'Usuario no encontrado' })
+        } else if (user.verified) {
+            return response.status(200).json({ success: true, message: 'Usuario ya verificado' })
+        } else if (user.verificationToken !== token) {
+            return response.status(400).json({ success: false, message: 'Token de verificación inválido' })
+        } else {
+            user.verified = true
+            user.verificationToken = null
+            await user.save()
+            return response.status(200).json({ success: true, message: 'Usuario verificado exitosamente' })
+        }
+    } catch (error) {
+        if (error instanceof jwt.TokenExpiredError) {
+            const decoded = jwt.decode(token)
+            if (decoded && decoded.username) {
+                const user = await User.findOne({ username: decoded.username })
+
+                if (user && !user.verified) {
+                    await User.deleteOne({ username: decoded.username })
+                    return response.status(410).json({ success: false, message: 'Token expirado. Debe registrarse nuevamente' })
+                }
+            }
+        }
+
+        console.error('Error during verification:', error)
+        return response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
 
 async function verifyToken(request, response, next) {
     const token = request.headers['authorization']?.split(' ')[1]
