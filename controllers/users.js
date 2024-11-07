@@ -9,83 +9,91 @@ const jwt = require('jsonwebtoken')
 const config = require('../utils/config')
 const sgMail = require('@sendgrid/mail')
 const createVerificationEmail = require('../utils/emailTemplates').createVerificationEmail
+const createRecoveryEmail = require('../utils/emailTemplates').createRecoveryEmail
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
 
 sgMail.setApiKey(config.SENDGRID_API_KEY)
 
+async function verifyToken(request, response, next) {
+    const token = request.headers['authorization']?.split(' ')[1]
+  
+    if (!token) {
+      return response.status(403).json({ success: false, message: 'No se proporcionó token' })
+    }
+  
+    try {
+      const decoded = jwt.verify(token, config.JWT_SECRET)
+      const user = await User.findById(decoded.userId)
+  
+      if (!user || user.token !== token) {
+        return response.status(401).json({ success: false, message: 'Token inválido. Por favor, inicie sesión nuevamente.' })
+      }
+  
+      request.userId = decoded.userId
+      next()
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        return response.status(401).json({ success: false, message: 'El token ha expirado. Por favor, inicie sesión nuevamente.' })
+      } else {
+        console.error('Error durante la verificación del token: ', error)
+        return response.status(401).json({ success: false, message: 'No autorizado' })
+      }
+    }
+  }
+  
+
+async function verifyAdmin(request, response, next) {
+    try {
+        const user = await User.findById(request.userId)
+        if (user.role !== 'admin') {
+            return response.status(403).json({ message: 'No autorizado' })
+        }
+        next()
+    } catch (error) {
+        console.error('Error during admin verification: ', error)
+        response.status(500).json({ message: 'Error en el servidor' })
+    }
+}
+
 const generateUniqueToken = (user) => {
     return jwt.sign(
-      { userId: user._id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' }
+        { userId: user._id, email: user.email, role: user.role },
+        config.JWT_SECRET,
+        { expiresIn: config.JWT_EXPIRES_IN }
     )
-  }
+}
   
 const invalidatePreviousToken = async (userId) => {
     await User.findByIdAndUpdate(userId, { token: null })
 }
 
 usersRouter.get('/', (request, response) => {
-    response.send(`<h1> Pensiona-T </h1>`)
+    response.redirect('https://pensiona-t.vercel.app/')
 })
 
 usersRouter.post('/api/login', async (request, response) => {
-    const { username, password } = request.body
+    const { email, password } = request.body
   
     try {
-      let user = await User.findOne({ username })
+      let user = await User.findOne({ email })
   
       if (!user) {
-        await LoginHistory.create({
-            username,
-            loginDate: new Date(),
-            ipAddress: request.ip,
-            success: false,
-            reason: 'Usuario incorrecto'
-        })
         return response.json({ success: false, message: 'Usuario incorrecto' })
       }
 
       if (!user.verified) {
-        await LoginHistory.create({
-            userId: user._id,
-            username: user.username,
-            role: user.role,
-            loginDate: new Date(),
-            ipAddress: request.ip,
-            success: false,
-            reason: 'Usuario no verificado'
-        })
         return response.json({ success: false, message: 'Cuenta no verificada, revisa tu bandeja de entrada' })
       }
   
       user = await checkAndUpdateUserStatus(user)
   
       if (user.status === 'inactive') {
-        await LoginHistory.create({
-            userId: user._id,
-            username: user.username,
-            role: user.role,
-            loginDate: new Date(),
-            ipAddress: request.ip,
-            success: false,
-            reason: 'Usuario inactivo'
-        })
         return response.json({ success: false, message: 'Usuario inactivo' })
       }
   
       const isMatch = await bcrypt.compare(password, user.password)
   
       if (!isMatch) {
-        await LoginHistory.create({
-            userId: user._id,
-            username: user.username,
-            role: user.role,
-            loginDate: new Date(),
-            ipAddress: request.ip,
-            success: false,
-            reason: 'Contraseña incorrecta'
-        })
         return response.json({ success: false, message: 'Contraseña incorrecta' })
       }
   
@@ -96,22 +104,17 @@ usersRouter.post('/api/login', async (request, response) => {
       const token = generateUniqueToken(user)
   
       user.token = token
-      user.isLoggedIn = true
       await user.save()
 
-      if (user.username !== 'admin' && user.username !== 'a@gmail.com' && user.username !== 'erhgdev@gmail.com') {
+      if (user.email !== 'admin' && user.email !== 'a@gmail.com' && user.email !== 'erhgdev@gmail.com') {
         await LoginHistory.create({
-            userId: user._id,
-            username: user.username,
+            email: user.email,
             role: user.role,
-            loginDate: new Date(),
-            ipAddress: request.ip,
-            success: true,
-            reason: 'Inicio de sesión exitoso'
+            ipAddress: request.ip
         })
       }
   
-      response.json({ success: true, username: user.username, role: user.role, token })
+      response.json({ success: true, email: user.email, role: user.role, token })
     } catch (error) {
       console.error('Error durante el inicio de sesión: ', error)
       response.status(500).json({ success: false, message: 'Error en el servidor' })
@@ -119,13 +122,7 @@ usersRouter.post('/api/login', async (request, response) => {
 })
   
 usersRouter.post('/api/logout', verifyToken, async (request, response) => {
-    const user = await User.findById(request.userId)
-
     try {
-      
-      user.isLoggedIn = false
-      await user.save()
-
       await invalidatePreviousToken(request.userId)
       response.json({ success: true, message: 'Sesión cerrada' })
     } catch (error) {
@@ -136,7 +133,7 @@ usersRouter.post('/api/logout', verifyToken, async (request, response) => {
 
 usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
     try {
-        const users = await User.find({ username: { $ne: 'admin' } }).select('-password')
+        const users = await User.find({ email: { $ne: 'admin' } }).select('-password')
         response.json(users)
     } catch (error) {
         console.error('Error feching users: ', error)
@@ -145,31 +142,24 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
 })
 
 usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
-    const { numeroConsar, firstname, username, password, secretQuestion, secretAnswer, role } = request.body
+    const { name, email, password, role } = request.body
 
     try {
-        const existingUser = await User.findOne({ username })
+        const existingUser = await User.findOne({ email })
         if (existingUser) {
             return response.json({ success: false, message: 'Correo electrónico ya registrado' })
         }
-        const existingConsar = await User.findOne({ numeroConsar })
-        if (existingConsar) {
-            return response.json({ success: false, message: 'Número CONSAR ya registrado' })
-        }
-
+        
         const hashedPassword = await bcrypt.hash(password, 10)
 
         const currentDate = new Date()
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
-        const verificationToken = jwt.sign({ username }, process.env.JWT_SECRET, { expiresIn: '1d' })
+        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '7d' })
 
         const newUser = new User({
-            numeroConsar,
-            firstname,
-            username,
+            name,
+            email,
             password: hashedPassword,
-            secretQuestion,
-            secretAnswer,
             role,
             expiration,
             verificationToken
@@ -178,15 +168,8 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
         await newUser.save()
         //actualizar a config.URL_FRONTEND
         const verificationUrl = `http://localhost:5173/verify?token=${verificationToken}`
-
-        const verificationEmail = createVerificationEmail(firstname, username, verificationUrl)
-
-        try {
-            await sgMail.send(verificationEmail)
-        } catch (error) {
-            console.error('Error sending verification email: ', error)
-            return response.json({ success: false, message: 'Error al enviar el correo de verificación' })
-        }
+        const verificationEmail = createVerificationEmail(name, email, verificationUrl)
+        await sgMail.send(verificationEmail)
 
         response.json({ success: true, message: 'Usuario creado exitosamente' })
     } catch (error) {
@@ -197,7 +180,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
 
 usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request, response) => {
     const { id } = request.params
-    const { numeroConsar, firstname, username, role, expiration, status } = request.body
+    const { name, email, role, expiration, status } = request.body
 
     try {
         const user = await User.findById(id)
@@ -205,9 +188,8 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
             return response.json({ success: false, message: 'Usuario no encontrado' })
         }
 
-        user.numeroConsar = numeroConsar
-        user.firstname = firstname
-        user.username = username
+        user.name = name
+        user.email = email
         user.role = role
         user.expiration = expiration
         user.status = status
@@ -235,25 +217,6 @@ usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (requ
         response.json({ success: true, message: 'Usuario eliminado exitosamente' })
     } catch (error) {
         console.error('Error during user deletion: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
-    }
-})
-
-usersRouter.post('/api/admin/users/logout/:userId', verifyToken, verifyAdmin, async (request, response) => {
-    const { userId } = request.params
-
-    try {
-        const user = await User.findById(userId)
-        if (!user) {
-            return response.status(404).json({ success: false, message: 'Usuario no encontrado' })
-        }
-
-        user.isLoggedIn = false
-        await user.save()
-
-        response.json({ success: true, message: 'Sesión del usuario cerrada exitosamente' })
-    } catch (error) {
-        console.error('Error during user logout: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -311,13 +274,11 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
         }
 
         response.json({
-            numeroConsar: user.numeroConsar,
-            firstname: user.firstname,
-            username: user.username,
+            name: user.name,
+            email: user.email,
             role: user.role,
             expiration: user.expiration,
-            status: user.status,
-            isLoggedIn: user.isLoggedIn
+            status: user.status
         })
     } catch (error) {
         console.error('Error during user check: ', error)
@@ -325,12 +286,12 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
     }
 })
 
-usersRouter.post('/api/verify-consar', async (req, res) => {
-    const { numeroConsar } = req.body
+/* usersRouter.post('/api/verify-consar', async (req, res) => {
+    const { numeroAgentePromotor } = req.body
 
     const url = 'http://www.apromotores.com.mx/siap-agentepromotor/redirectResultadoConsulta.do'
     const data = new URLSearchParams({
-        numeroAgentePromotor: numeroConsar,
+        numeroAgentePromotor: numeroAgentePromotor,
         apellidoPaterno: '',
         apellidoMaterno: '',
         nombre: '',
@@ -366,97 +327,128 @@ usersRouter.post('/api/verify-consar', async (req, res) => {
         console.error('Error al verificar el número CONSAR:', error)
         res.status(500).json({ success: false, message: 'Error en el servidor al verificar el número CONSAR' })
     }
-})
+}) */
 
 usersRouter.post('/api/register', async (request, response) => {
-    const { numeroConsar, firstname, username, password, secretQuestion, secretAnswer } = request.body
+    const { name, email, password } = request.body
 
     try {
-        const existingUser = await User.findOne({ username })
+        const existingUser = await User.findOne({ email })
         if (existingUser) {
             return response.status(400).json({ success: false, message: 'Correo electrónico ya registrado' })
         }
-        const existingConsar = await User.findOne({ numeroConsar })
-        if (existingConsar) {
-            return response.status(400).json({ success: false, message: 'Número CONSAR ya registrado' })
-        }
-
+        
         const hashedPassword = await bcrypt.hash(password, 10)
 
         const currentDate = new Date()
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
+        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '7d' })
 
         const newUser = new User({
-            numeroConsar,
-            firstname,
-            username,
+            name,
+            email,
             password: hashedPassword,
-            secretQuestion,
-            secretAnswer,
-            expiration
+            expiration,
+            verificationToken
         })
 
         await newUser.save()
+        //actualizar a config.URL_FRONTEND
+        const verificationUrl = `http://localhost:5173/verify?token=${verificationToken}`
+        const verificationEmail = createVerificationEmail(name, email, verificationUrl)
+        await sgMail.send(verificationEmail)
 
-        response.json({ success: true, message: 'Usuario registrado' })
+        response.json({ success: true, message: 'Usuario registrado, revisa tu bandeja de entrada' })
     } catch (error) {
         console.error('Error during registration: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.post('/api/recovery/step1', async (request, response) => {
+usersRouter.post('/api/recovery', async (request, response) => {
     const { email } = request.body
 
     try {
-        const user = await User.findOne({ username: email })
+        const user = await User.findOne({ email: email })
         if (!user) {
             return response.json({ success: false, message: 'Usuario no encontrado' })
         }
 
-        response.json({ success: true, secretQuestion: user.secretQuestion })
+        const recoveryToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '1d' })
+        user.recoveryToken = recoveryToken
+        await user.save()
+
+        //actualizar a config.URL_FRONTEND
+        const recoveryUrl = `http://localhost:5173/recovery?token=${recoveryToken}`
+        /* const recoveryEmail = createRecoveryEmail(user.name, email, recoveryUrl)
+        await sgMail.send(recoveryEmail) */
+        console.log(recoveryUrl)
+
+        response.json({ success: true, message: 'Correo de recuperación enviado, revisa tu bandeja de entrada' })
     } catch (error) {
-        console.error('Error during recovery step 1:', error)
+        console.error('Error during recovery:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.post('/api/recovery/step2', async (request, response) => {
-    const { email, secretAnswer } = request.body
+usersRouter.get('/api/recovery', async (request, response) => {
+    const { token } = request.query
 
     try {
-        const user = await User.findOne({ username: email })
+        const decoded = jwt.verify(token, config.JWT_SECRET)
+        const user = await User.findOne({ email: decoded.email })
+
         if (!user) {
-            return response.json({ success: false, message: 'Usuario no encontrado' })
+            return response.status(404).json({ success: false, message: 'Usuario no encontrado' })
         }
 
-        if (user.secretAnswer !== secretAnswer) {
-            return response.json({ success: false, message: 'Respuesta incorrecta' })
+        if (user.recoveryToken !== token) {
+            return response.status(400).json({ success: false, message: 'Token de recuperación inválido' })
         }
 
-        response.json({ success: true, message: 'Respuesta correcta' })
+        return response.status(200).json({ success: true, message: 'Token de recuperación válido' })
     } catch (error) {
-        console.error('Error during recovery step 2:', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
+        if (error instanceof jwt.TokenExpiredError) {
+            const decoded = jwt.decode(token)
+            if (decoded && decoded.email) {
+                const user = await User.findOne({ email: decoded.email })
+                if (user) {
+                    user.recoveryToken = null
+                    await user.save()
+                }
+            }
+            return response.status(400).json({ success: false, message: 'Token expirado, solicita nuevamente la recuperación de contraseña' })
+        }
+
+        console.error('Error during validation:', error)
+        return response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.post('/api/recovery/step3', async (request, response) => {
-    const { email, newPassword } = request.body
+
+usersRouter.post('/api/reset-password', async (request, response) => {
+    const { token, newPassword } = request.body
 
     try {
-        const user = await User.findOne({ username: email })
+        const decoded = jwt.verify(token, config.JWT_SECRET)
+        const user = await User.findOne({ email: decoded.email })
+
         if (!user) {
-            return response.json({ success: false, message: 'Usuario no encontrado' })
+            return response.status(404).json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        if (user.recoveryToken !== token) {
+            return response.status(400).json({ success: false, message: 'Token de recuperación inválido' })
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, 10)
         user.password = hashedPassword
+        user.recoveryToken = null
         await user.save()
 
         response.json({ success: true, message: 'Contraseña actualizada exitosamente' })
     } catch (error) {
-        console.error('Error during recovery step 3:', error)
+        console.error('Error during password reset:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -465,8 +457,8 @@ usersRouter.get('/api/verify', async (request, response) => {
     const { token } = request.query
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
-        const user = await User.findOne({ username: decoded.username })
+        const decoded = jwt.verify(token, config.JWT_SECRET)
+        const user = await User.findOne({ email: decoded.email })
 
         if (!user) {
             return response.status(404).json({ success: false, message: 'Usuario no encontrado' })
@@ -483,61 +475,21 @@ usersRouter.get('/api/verify', async (request, response) => {
     } catch (error) {
         if (error instanceof jwt.TokenExpiredError) {
             const decoded = jwt.decode(token)
-            if (decoded && decoded.username) {
-                const user = await User.findOne({ username: decoded.username })
+            if (decoded && decoded.email) {
+                const user = await User.findOne({ email: decoded.email })
 
                 if (user && !user.verified) {
-                    await User.deleteOne({ username: decoded.username })
+                    await User.deleteOne({ email: decoded.email })
                     return response.status(410).json({ success: false, message: 'Token expirado. Debe registrarse nuevamente' })
                 }
             }
+        } else if (error instanceof jwt.JsonWebTokenError) {
+            return response.status(400).json({ success: false, message: 'Token de verificación inválido' })
         }
 
         console.error('Error during verification:', error)
         return response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
-
-
-async function verifyToken(request, response, next) {
-    const token = request.headers['authorization']?.split(' ')[1]
-  
-    if (!token) {
-      return response.status(403).json({ success: false, message: 'No se proporcionó token' })
-    }
-  
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      const user = await User.findById(decoded.userId)
-  
-      if (!user || user.token !== token) {
-        return response.status(401).json({ success: false, message: 'Token inválido. Por favor, inicie sesión nuevamente.' })
-      }
-  
-      request.userId = decoded.userId
-      next()
-    } catch (error) {
-      if (error.name === 'TokenExpiredError') {
-        return response.status(401).json({ success: false, message: 'El token ha expirado. Por favor, inicie sesión nuevamente.' })
-      } else {
-        console.error('Error durante la verificación del token: ', error)
-        return response.status(401).json({ success: false, message: 'No autorizado' })
-      }
-    }
-  }
-  
-
-async function verifyAdmin(request, response, next) {
-    try {
-        const user = await User.findById(request.userId)
-        if (user.role !== 'admin') {
-            return response.status(403).json({ message: 'No autorizado' })
-        }
-        next()
-    } catch (error) {
-        console.error('Error during admin verification: ', error)
-        response.status(500).json({ message: 'Error en el servidor' })
-    }
-}
 
 module.exports = usersRouter

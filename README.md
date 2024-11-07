@@ -1,74 +1,78 @@
 # Pensiona-T Back-End
 
-Welcome to the Pensiona-T Back-End repository. This project is responsible for managing the server-side logic and database interactions for the Pensiona-T application.
+Bienvenido al repositorio de Pensiona-T Back-End. Este proyecto se encarga de gestionar la lógica del servidor y las interacciones con la base de datos para la aplicación Pensiona-T.
 
-## Table of Contents
+## Tabla de Contenidos
 
-- [Introduction](#introduction)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
+- [Introducción](#introducción)
+- [Características](#características)
+- [Instalación](#instalación)
+- [Uso](#uso)
+- [Contribución](#contribución)
+- [Licencia](#licencia)
 
-## Introduction
+## Introducción
 
-The Pensiona-T Back-End is built using modern web technologies to ensure scalability, security, and performance. It provides RESTful APIs for the front-end application and handles all business logic and data persistence.
+Pensiona-T Back-End está construido con tecnologías web modernas para garantizar escalabilidad, seguridad y rendimiento. Proporciona APIs RESTful para la aplicación front-end y maneja toda la lógica de negocio y la persistencia de datos.
 
-## Features
+## Características
 
-- User authentication and authorization
-- Pension plan management
-- Contribution tracking
-- Reporting and analytics
-- Secure and scalable architecture
+- Autenticación y autorización de usuarios
+- Arquitectura segura y escalable
 
-## Installation
+## Instalación
 
-To get started with the Pensiona-T Back-End, follow these steps:
+Para comenzar con Pensiona-T Back-End, sigue estos pasos:
 
-1. Clone the repository:
+1. Clona el repositorio:
     ```bash
     git clone https://github.com/yourusername/pensiona-t_back.git
     ```
-2. Navigate to the project directory:
+2. Navega al directorio del proyecto:
     ```bash
     cd pensiona-t_back
     ```
-3. Install dependencies:
+3. Instala las dependencias:
     ```bash
     npm install
     ```
-4. Set up environment variables by creating a `.env` file based on the `.env.example` file.
-
-5. Run the application:
+4. Configura las variables de entorno creando un archivo `.env` 
+    ```bash
+    MONGODB_URI=TU_URL
+    JWT_SECRET=TU_FRASE_SECRETA
+    PORT=5000
+    SENDGRID_API_KEY='TU_API_KEY'
+    FROM_EMAIL=tuemail@gmail.com
+    URL_FRONTEND=https://tuurl.com
+    ```
+5. Ejecuta la aplicación:
     ```bash
     npm start
     ```
 
-## Usage
+## Uso
 
-After installation, the back-end server will be running on `http://localhost:3000`. You can use tools like Postman to interact with the APIs.
+Después de la instalación, el servidor back-end estará funcionando en `http://localhost:5000`. Puedes usar herramientas como Postman para interactuar con las APIs.
 
-## Contributing
+## Contribución
 
-We welcome contributions to the Pensiona-T Back-End project. To contribute, please follow these steps:
+Damos la bienvenida a contribuciones al proyecto Pensiona-T Back-End. Para contribuir, sigue estos pasos:
 
-1. Fork the repository.
-2. Create a new branch:
+1. Haz un fork del repositorio.
+2. Crea una nueva rama:
     ```bash
-    git checkout -b feature-name
+    git checkout -b nombre-de-la-funcionalidad
     ```
-3. Make your changes and commit them:
+3. Realiza tus cambios y haz commit:
     ```bash
-    git commit -m "Description of changes"
+    git commit -m "Descripción de los cambios"
     ```
-4. Push to the branch:
+4. Haz push a la rama:
     ```bash
-    git push origin feature-name
+    git push origin nombre-de-la-funcionalidad
     ```
-5. Create a pull request.
+5. Crea un pull request.
 
-## License
+## Licencia
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Este proyecto está licenciado bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
