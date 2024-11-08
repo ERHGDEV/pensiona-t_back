@@ -42,7 +42,7 @@ const createVerificationEmail = (name, email, url) => {
                         <!-- Footer -->
                         <tr>
                         <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
-                            <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T.</p>
+                            <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T</p>
                         </td>
                         </tr>
                     </table>
@@ -99,7 +99,7 @@ const createRecoveryEmail = (name, email, url) => {
                                 <!-- Footer -->
                                 <tr>
                                     <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
-                                        <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T.</p>
+                                        <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T</p>
                                     </td>
                                 </tr>
                             </table>

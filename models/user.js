@@ -14,19 +14,4 @@ const userSchema = new mongoose.Schema({
     recoveryToken: { type: String, default: null }
 })
 
-/* userSchema.methods.clearToken = function() {
-    this.token = null;
-    return this.save();
-}
-
-userSchema.methods.setToken = function(token) {
-    this.token = token;
-    this.isLoggedIn = true;
-    return this.save();
-}
-
-userSchema.methods.verifyToken = function(token) {
-    return this.token === token;
-} */
-
 module.exports = mongoose.model('User', userSchema)
