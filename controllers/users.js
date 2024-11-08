@@ -103,7 +103,13 @@ usersRouter.post('/api/login', async (request, response) => {
       user.token = token
       await user.save()
 
-      if (user.role !== 'admin' && user.email !== 'a@gmail.com') {
+      if (user.email !== 'admin' && 
+            user.email !== 'a@gmail.com' &&
+            user.email !== 'pensionat.calculadora@gmail.com' &&
+            user.email !== 'erhgdev@gmail.com' &&
+            user.email !== 'erickrhernandezg@gmail.com' &&
+            user.email !== 'ericardohernandezg@gmail.com'    
+        ) {
         await LoginHistory.create({
             email: user.email,
             role: user.role,
