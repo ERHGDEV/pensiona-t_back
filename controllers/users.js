@@ -169,8 +169,8 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
         })
 
         await newUser.save()
-        //actualizar a config.URL_FRONTEND
-        const verificationUrl = `http://localhost:5173/verify?token=${verificationToken}`
+        //En local apunta a localhost, en producción apunta a la URL de producción
+        const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
         await sgMail.send(verificationEmail)
 
@@ -357,8 +357,8 @@ usersRouter.post('/api/register', async (request, response) => {
         })
 
         await newUser.save()
-        //actualizar a config.URL_FRONTEND
-        const verificationUrl = `http://localhost:5173/verify?token=${verificationToken}`
+        //En local apunta a localhost, en producción apunta a la URL de producción
+        const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
         await sgMail.send(verificationEmail)
 
@@ -382,8 +382,8 @@ usersRouter.post('/api/recovery', async (request, response) => {
         user.recoveryToken = recoveryToken
         await user.save()
 
-        //actualizar a config.URL_FRONTEND
-        const recoveryUrl = `http://localhost:5173/recovery?token=${recoveryToken}`
+        //En local apunta a localhost, en producción apunta a la URL de producción
+        const recoveryUrl = `${config.URL_FRONTEND}/recovery?token=${recoveryToken}`
         const recoveryEmail = createRecoveryEmail(user.name, email, recoveryUrl)
         await sgMail.send(recoveryEmail)
 
