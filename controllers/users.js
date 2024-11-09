@@ -157,7 +157,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
 
         const currentDate = new Date()
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
-        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: config.JWT_REGISTER_EXPIRES_IN })
+        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '7d' })
 
         const newUser = new User({
             name,
@@ -346,7 +346,7 @@ usersRouter.post('/api/register', async (request, response) => {
 
         const currentDate = new Date()
         const expiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
-        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: config.JWT_REGISTER_EXPIRES_IN })
+        const verificationToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '7d' })
 
         const newUser = new User({
             name,
@@ -378,7 +378,7 @@ usersRouter.post('/api/recovery', async (request, response) => {
             return response.json({ success: false, message: 'Usuario no encontrado' })
         }
 
-        const recoveryToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: config.JWT_RESET_PASSWORD_EXPIRES_IN })
+        const recoveryToken = jwt.sign({ email }, config.JWT_SECRET, { expiresIn: '2d' })
         user.recoveryToken = recoveryToken
         await user.save()
 
