@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const config = require('../utils/config')
 const sgMail = require('@sendgrid/mail')
+const { startOfDay, endOfDay, parseISO } = require('date-fns')
 const createVerificationEmail = require('../utils/emailTemplates').createVerificationEmail
 const createRecoveryEmail = require('../utils/emailTemplates').createRecoveryEmail
 const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
@@ -103,9 +104,7 @@ usersRouter.post('/api/login', async (request, response) => {
       user.token = token
       await user.save()
 
-      if (user.email !== 'admin' && 
-            user.email !== 'a@gmail.com' &&
-            user.email !== 'pensionat.calculadora@gmail.com' &&
+      if (user.email !== 'pensionat.calculadora@gmail.com' &&
             user.email !== 'erhgdev@gmail.com' &&
             user.email !== 'erickrhernandezg@gmail.com' &&
             user.email !== 'ericardohernandezg@gmail.com'    
@@ -220,6 +219,49 @@ usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (requ
         response.json({ success: true, message: 'Usuario eliminado exitosamente' })
     } catch (error) {
         console.error('Error during user deletion: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (request, response) => {
+    const { start, end } = request.query
+  
+    try {
+        const startDate = startOfDay(parseISO(start))
+        const endDate = endOfDay(parseISO(end))
+    
+        const loginData = await LoginHistory.aggregate([
+            {
+                $match: {
+                    loginDate: { $gte: startDate, $lte: endDate }
+            }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'userInfo'
+            }
+            },
+            {
+                $unwind: '$userInfo'
+            },
+            {
+                $project: {
+                    email: '$email',
+                    name: '$name',
+                    timestamp: '$loginDate',
+            }
+            },
+            {
+                $sort: { timestamp: 1 }
+            }
+        ])
+  
+        response.json(loginData)
+    } catch (error) {
+        console.error('Error fetching login activity:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
