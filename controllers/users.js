@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const config = require('../utils/config')
 const sgMail = require('@sendgrid/mail')
+const logger = require('../utils/logger')
+const rateLimit = require('express-rate-limit')
 const { startOfDay, endOfDay, parseISO } = require('date-fns')
 const createVerificationEmail = require('../utils/emailTemplates').createVerificationEmail
 const createRecoveryEmail = require('../utils/emailTemplates').createRecoveryEmail
@@ -34,7 +36,7 @@ async function verifyToken(request, response, next) {
         if (error.name === 'TokenExpiredError') {
             return response.status(401).json({ success: false, message: 'El token ha expirado. Por favor, inicie sesión nuevamente.' })
         } else {
-            console.error('Error durante la verificación del token: ', error)
+            logger.error('Error durante la verificación del token: ', error)
             return response.status(401).json({ success: false, message: 'No autorizado' })
         }
     }
@@ -48,7 +50,7 @@ async function verifyAdmin(request, response, next) {
         }
         next()
     } catch (error) {
-        console.error('Error during admin verification: ', error)
+        logger.error('Error during admin verification: ', error)
         response.status(500).json({ message: 'Error en el servidor' })
     }
 }
@@ -65,11 +67,19 @@ const invalidatePreviousToken = async (userId) => {
     await User.findByIdAndUpdate(userId, { token: null })
 }
 
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { 
+        success: false, 
+        message: 'Has superado el límite de solicitudes. Intenta de nuevo en 15 minutos.' }
+})
+
 usersRouter.get('/', (request, response) => {
     response.redirect('https://pensiona-t.vercel.app/')
 })
 
-usersRouter.post('/api/login', async (request, response) => {
+usersRouter.post('/api/login', limiter, async (request, response) => {
     const { email, password } = request.body
   
     try {
@@ -118,7 +128,7 @@ usersRouter.post('/api/login', async (request, response) => {
   
       response.json({ success: true, email: user.email, role: user.role, token })
     } catch (error) {
-      console.error('Error durante el inicio de sesión: ', error)
+      logger.error('Error durante el inicio de sesión: ', error)
       response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -128,7 +138,7 @@ usersRouter.post('/api/logout', verifyToken, async (request, response) => {
       await invalidatePreviousToken(request.userId)
       response.json({ success: true, message: 'Sesión cerrada' })
     } catch (error) {
-      console.error('Error durante el cierre de sesión: ', error)
+      logger.error('Error durante el cierre de sesión: ', error)
       response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -138,7 +148,7 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
         const users = await User.find({ role: { $ne: 'admin' } }).select('-password')
         response.json(users)
     } catch (error) {
-        console.error('Error feching users: ', error)
+        logger.error('Error feching users: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -175,7 +185,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
 
         response.json({ success: true, message: 'Usuario creado exitosamente' })
     } catch (error) {
-        console.error('Error during user creation: ', error)
+        logger.error('Error during user creation: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -200,7 +210,7 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
 
         response.json({ success: true, message: 'Usuario actualizado exitosamente' })
     } catch (error) {
-        console.error('Error during user update: ', error)
+        logger.error('Error during user update: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -218,50 +228,45 @@ usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (requ
 
         response.json({ success: true, message: 'Usuario eliminado exitosamente' })
     } catch (error) {
-        console.error('Error during user deletion: ', error)
+        logger.error('Error during user deletion: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
 usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (request, response) => {
     const { start, end } = request.query
-  
+
     try {
         const startDate = startOfDay(parseISO(start))
         const endDate = endOfDay(parseISO(end))
-    
+
         const loginData = await LoginHistory.aggregate([
             {
                 $match: {
                     loginDate: { $gte: startDate, $lte: endDate }
-            }
+                }
             },
             {
-                $lookup: {
-                    from: 'users',
-                    localField: 'userId',
-                    foreignField: '_id',
-                    as: 'userInfo'
-            }
+                $group: {
+                    _id: {
+                        $dateToString: { format: "%Y-%m-%d", date: "$loginDate" }
+                    },
+                    count: { $sum: 1 }
+                }
             },
             {
-                $unwind: '$userInfo'
-            },
-            {
-                $project: {
-                    email: '$email',
-                    name: '$name',
-                    timestamp: '$loginDate',
-            }
-            },
-            {
-                $sort: { timestamp: 1 }
+                $sort: { _id: 1 }
             }
         ])
-  
-        response.json(loginData)
+
+        const formattedData = loginData.map(item => ({
+            date: item._id,
+            count: item.count
+        }))
+
+        response.json(formattedData)
     } catch (error) {
-        console.error('Error fetching login activity:', error)
+        logger.error('Error fetching login activity:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -274,7 +279,7 @@ usersRouter.get('/api/admin/values', verifyToken, verifyAdmin, async (request, r
         }
         response.json({ success: true, salarioMinimo: values.salarioMinimo, uma: values.uma })
     } catch (error) {
-        console.error('Error fetching values: ', error)
+        logger.error('Error fetching values: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -293,7 +298,7 @@ usersRouter.put('/api/admin/values', verifyToken, verifyAdmin, async (request, r
         await values.save()
         response.json({ success: true, message: 'Valores actualizados exitosamente' })
     } catch (error) {
-        console.error('Error updating values: ', error)
+        logger.error('Error updating values: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -306,7 +311,7 @@ usersRouter.get('/api/values', async (request, response) => {
         }
         response.json({ success: true, salarioMinimo: values.salarioMinimo, uma: values.uma })
     } catch (error) {
-        console.error('Error fetching values: ', error)
+        logger.error('Error fetching values: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -326,7 +331,7 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
             status: user.status
         })
     } catch (error) {
-        console.error('Error during user check: ', error)
+        logger.error('Error during user check: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
@@ -369,12 +374,12 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
 
         res.json({ success: true, nombre: resultado.nombre, estatus: resultado.estatus })
     } catch (error) {
-        console.error('Error al verificar el número CONSAR:', error)
+        logger.error('Error al verificar el número CONSAR:', error)
         res.status(500).json({ success: false, message: 'Error en el servidor al verificar el número CONSAR' })
     }
 }) */
 
-usersRouter.post('/api/register', async (request, response) => {
+usersRouter.post('/api/register', limiter, async (request, response) => {
     const { name, email, password } = request.body
 
     try {
@@ -406,12 +411,12 @@ usersRouter.post('/api/register', async (request, response) => {
 
         response.json({ success: true, message: 'Usuario registrado, revisa tu bandeja de entrada' })
     } catch (error) {
-        console.error('Error during registration: ', error)
+        logger.error('Error during registration: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.post('/api/recovery', async (request, response) => {
+usersRouter.post('/api/recovery', limiter, async (request, response) => {
     const { email } = request.body
 
     try {
@@ -431,12 +436,12 @@ usersRouter.post('/api/recovery', async (request, response) => {
 
         response.json({ success: true, message: 'Correo de recuperación enviado, revisa tu bandeja de entrada' })
     } catch (error) {
-        console.error('Error during recovery:', error)
+        logger.error('Error during recovery:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.get('/api/recovery', async (request, response) => {
+usersRouter.get('/api/recovery', limiter, async (request, response) => {
     const { token } = request.query
 
     try {
@@ -465,13 +470,13 @@ usersRouter.get('/api/recovery', async (request, response) => {
             return response.status(400).json({ success: false, message: 'Token expirado, solicita nuevamente la recuperación de contraseña' })
         }
 
-        console.error('Error during validation:', error)
+        logger.error('Error during validation:', error)
         return response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
 
-usersRouter.post('/api/reset-password', async (request, response) => {
+usersRouter.post('/api/reset-password', limiter, async (request, response) => {
     const { token, newPassword } = request.body
 
     try {
@@ -493,12 +498,12 @@ usersRouter.post('/api/reset-password', async (request, response) => {
 
         response.json({ success: true, message: 'Contraseña actualizada exitosamente' })
     } catch (error) {
-        console.error('Error during password reset:', error)
+        logger.error('Error during password reset:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
-usersRouter.get('/api/verify', async (request, response) => {
+usersRouter.get('/api/verify', limiter, async (request, response) => {
     const { token } = request.query
 
     try {
@@ -532,7 +537,7 @@ usersRouter.get('/api/verify', async (request, response) => {
             return response.status(400).json({ success: false, message: 'Token de verificación inválido' })
         }
 
-        console.error('Error during verification:', error)
+        logger.error('Error during verification:', error)
         return response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
