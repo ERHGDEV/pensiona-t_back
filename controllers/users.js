@@ -1,148 +1,91 @@
 const usersRouter = require('express').Router()
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const sgMail = require('@sendgrid/mail')
+const { startOfDay, endOfDay, parseISO } = require('date-fns')
 const User = require('../models/user')
 const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
 const config = require('../utils/config')
-const sgMail = require('@sendgrid/mail')
 const logger = require('../utils/logger')
-const rateLimit = require('express-rate-limit')
-const { startOfDay, endOfDay, parseISO } = require('date-fns')
-const createVerificationEmail = require('../utils/emailTemplates').createVerificationEmail
-const createRecoveryEmail = require('../utils/emailTemplates').createRecoveryEmail
-const checkAndUpdateUserStatus = require('../utils/middleware').checkAndUpdateUserStatus
+const { createVerificationEmail, createRecoveryEmail } = require('../utils/emailTemplates')
+const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
+const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
 
 sgMail.setApiKey(config.SENDGRID_API_KEY)
 
-async function verifyToken(request, response, next) {
-    const token = request.headers['authorization']?.split(' ')[1]
-  
-    if (!token) {
-        return response.status(403).json({ success: false, message: 'No se proporcionó token' })
-    }
-
-    try {
-        const decoded = jwt.verify(token, config.JWT_SECRET)
-        const user = await User.findById(decoded.userId)
-
-    if (!user || user.token !== token) {
-        return response.status(401).json({ success: false, message: 'Token inválido. Por favor, inicie sesión nuevamente.' })
-    }
-
-    request.userId = decoded.userId
-    next()
-    } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return response.status(401).json({ success: false, message: 'El token ha expirado. Por favor, inicie sesión nuevamente.' })
-        } else {
-            logger.error('Error durante la verificación del token: ', error)
-            return response.status(401).json({ success: false, message: 'No autorizado' })
-        }
-    }
-}
-
-async function verifyAdmin(request, response, next) {
-    try {
-        const user = await User.findById(request.userId)
-        if (user.role !== 'admin') {
-            return response.status(403).json({ message: 'No autorizado' })
-        }
-        next()
-    } catch (error) {
-        logger.error('Error during admin verification: ', error)
-        response.status(500).json({ message: 'Error en el servidor' })
-    }
-}
-
-const generateUniqueToken = (user) => {
-    return jwt.sign(
-        { userId: user._id, email: user.email, role: user.role },
-        config.JWT_SECRET,
-        { expiresIn: config.JWT_EXPIRES_IN }
-    )
-}
-  
-const invalidatePreviousToken = async (userId) => {
-    await User.findByIdAndUpdate(userId, { token: null })
-}
-
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    message: { 
-        success: false, 
-        message: 'Has superado el límite de solicitudes. Intenta de nuevo en 15 minutos.' }
-})
-
+// Redirige a la URL del frontend
 usersRouter.get('/', (request, response) => {
-    response.redirect('https://pensiona-t.vercel.app/')
+    response.redirect(config.URL_FRONTEND)
 })
 
+// Inicia sesión del usuario, genera token y guarda en BD
 usersRouter.post('/api/login', limiter, async (request, response) => {
     const { email, password } = request.body
   
     try {
-      let user = await User.findOne({ email })
+        let user = await User.findOne({ email })
   
-      if (!user) {
-        return response.json({ success: false, message: 'Usuario incorrecto' })
-      }
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario incorrecto' })
+        }
 
-      if (!user.verified) {
-        return response.json({ success: false, message: 'Cuenta no verificada, revisa tu bandeja de entrada' })
-      }
+        if (!user.verified) {
+            return response.json({ success: false, message: 'Cuenta no verificada, revisa tu bandeja de entrada' })
+        }
   
-      user = await checkAndUpdateUserStatus(user)
+        user = await checkAndUpdateUserStatus(user)
   
-      if (user.status === 'inactive') {
-        return response.json({ success: false, message: 'Usuario inactivo' })
-      }
+        if (user.status === 'inactive') {
+            return response.json({ success: false, message: 'Usuario inactivo' })
+        }
   
-      const isMatch = await bcrypt.compare(password, user.password)
+        const isMatch = await bcrypt.compare(password, user.password)
   
-      if (!isMatch) {
-        return response.json({ success: false, message: 'Contraseña incorrecta' })
-      }
+        if (!isMatch) {
+            return response.json({ success: false, message: 'Contraseña incorrecta' })
+        }
   
-      if (user.token) {
-        await invalidatePreviousToken(user._id)
-      }
+        if (user.token) {
+            await invalidatePreviousToken(user._id)
+        }
   
-      const token = generateUniqueToken(user)
+        const token = generateUniqueToken(user)
   
-      user.token = token
-      await user.save()
+        user.token = token
+        await user.save()
 
-      if (user.email !== 'pensionat.calculadora@gmail.com' &&
+        if (user.email !== 'pensionat.calculadora@gmail.com' &&
             user.email !== 'erhgdev@gmail.com' &&
             user.email !== 'erickrhernandezg@gmail.com' &&
             user.email !== 'ericardohernandezg@gmail.com'    
         ) {
-        await LoginHistory.create({
-            email: user.email,
-            role: user.role,
-            ipAddress: request.ip
-        })
-      }
+            await LoginHistory.create({
+                email: user.email,
+                role: user.role,
+                ipAddress: request.ip
+            })
+        }
   
-      response.json({ success: true, email: user.email, role: user.role, token })
+            response.json({ success: true, email: user.email, role: user.role, token })
     } catch (error) {
-      logger.error('Error durante el inicio de sesión: ', error)
-      response.status(500).json({ success: false, message: 'Error en el servidor' })
-    }
-})
-  
-usersRouter.post('/api/logout', verifyToken, async (request, response) => {
-    try {
-      await invalidatePreviousToken(request.userId)
-      response.json({ success: true, message: 'Sesión cerrada' })
-    } catch (error) {
-      logger.error('Error durante el cierre de sesión: ', error)
-      response.status(500).json({ success: false, message: 'Error en el servidor' })
+        logger.error('Error durante el inicio de sesión: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
+// Cierra la sesión del usuario, invalida el token actual
+usersRouter.post('/api/logout', verifyToken, async (request, response) => {
+    try {
+        await invalidatePreviousToken(request.userId)
+        response.json({ success: true, message: 'Sesión cerrada' })
+    } catch (error) {
+        logger.error('Error durante el cierre de sesión: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Obtiene lista de usuarios para el administrador, excluyendo al administrador y campo de contraseña
 usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
     try {
         const users = await User.find({ role: { $ne: 'admin' } }).select('-password')
@@ -153,6 +96,7 @@ usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
     }
 })
 
+// Crea un nuevo usuario, envía correo de verificación y guarda token de verificación
 usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
     const { name, email, password, role } = request.body
 
@@ -190,6 +134,7 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
     }
 })
 
+// Actualiza un usuario por ID, excluyendo campo de contraseña
 usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request, response) => {
     const { id } = request.params
     const { name, email, role, expiration, status } = request.body
@@ -215,6 +160,7 @@ usersRouter.put('/api/admin/users/:id', verifyToken, verifyAdmin, async (request
     }
 })
 
+// Elimina un usuario por ID
 usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (request, response) => {
     const { id } = request.params
 
@@ -233,6 +179,7 @@ usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (requ
     }
 })
 
+// Obtiene el historial de inicio de sesión por día de un rango de fechas
 usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (request, response) => {
     const { start, end } = request.query
 
@@ -271,6 +218,7 @@ usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (req
     }
 })
 
+// Obtiene los valores de salario mínimo y UMA
 usersRouter.get('/api/admin/values', verifyToken, verifyAdmin, async (request, response) => {
     try {
         const values = await Values.findOne()
@@ -284,6 +232,7 @@ usersRouter.get('/api/admin/values', verifyToken, verifyAdmin, async (request, r
     }
 })
 
+// Actualiza los valores de salario mínimo y UMA
 usersRouter.put('/api/admin/values', verifyToken, verifyAdmin, async (request, response) => {
     const { salarioMinimo, uma } = request.body
 
@@ -303,6 +252,7 @@ usersRouter.put('/api/admin/values', verifyToken, verifyAdmin, async (request, r
     }
 })
 
+// Obtiene los valores de salario mínimo y UMA
 usersRouter.get('/api/values', async (request, response) => {
     try {
         const values = await Values.findOne()
@@ -316,6 +266,7 @@ usersRouter.get('/api/values', async (request, response) => {
     }
 })
 
+// Obtiene el usuario actual
 usersRouter.get('/api/user', verifyToken, async (request, response) => {
     try { 
         const user = await User.findById(request.userId)
@@ -336,49 +287,7 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
     }
 })
 
-/* usersRouter.post('/api/verify-consar', async (req, res) => {
-    const { numeroAgentePromotor } = req.body
-
-    const url = 'http://www.apromotores.com.mx/siap-agentepromotor/redirectResultadoConsulta.do'
-    const data = new URLSearchParams({
-        numeroAgentePromotor: numeroAgentePromotor,
-        apellidoPaterno: '',
-        apellidoMaterno: '',
-        nombre: '',
-        mensajeError: '',
-        mensajeSinResultados: '',
-        fechaUltimaActualizacion: '',
-    })
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: data
-        })
-        
-        const html = await response.text()
-        const $ = cheerio.load(html)
-
-        let resultado = { estatus: '', nombre: '' }
-
-        $('td').each((index, element) => {
-            const text = $(element).text().trim()
-            if (text.includes('Nombre:')) resultado.nombre = text.split('Nombre:')[1].trim()
-            if (text.includes('Estatus:')) resultado.estatus = text.split('Estatus:')[1].trim()
-        })
-
-        if (!resultado.nombre || !resultado.estatus) {
-            return res.status(400).json({ success: false, message: 'No se encontraron resultados para el número CONSAR' })
-        }
-
-        res.json({ success: true, nombre: resultado.nombre, estatus: resultado.estatus })
-    } catch (error) {
-        logger.error('Error al verificar el número CONSAR:', error)
-        res.status(500).json({ success: false, message: 'Error en el servidor al verificar el número CONSAR' })
-    }
-}) */
-
+// Registra un nuevo usuario, envía correo de verificación y guarda token de verificación
 usersRouter.post('/api/register', limiter, async (request, response) => {
     const { name, email, password } = request.body
 
@@ -416,6 +325,7 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
     }
 })
 
+// Envía correo de recuperación de contraseña y guarda token de recuperación
 usersRouter.post('/api/recovery', limiter, async (request, response) => {
     const { email } = request.body
 
@@ -441,6 +351,7 @@ usersRouter.post('/api/recovery', limiter, async (request, response) => {
     }
 })
 
+// Valida el token de recuperación de contraseña
 usersRouter.get('/api/recovery', limiter, async (request, response) => {
     const { token } = request.query
 
@@ -475,7 +386,7 @@ usersRouter.get('/api/recovery', limiter, async (request, response) => {
     }
 })
 
-
+// Actualiza la contraseña del usuario con el token de recuperación
 usersRouter.post('/api/reset-password', limiter, async (request, response) => {
     const { token, newPassword } = request.body
 
@@ -503,6 +414,7 @@ usersRouter.post('/api/reset-password', limiter, async (request, response) => {
     }
 })
 
+// Verifica el token de verificación y actualiza el estado del usuario
 usersRouter.get('/api/verify', limiter, async (request, response) => {
     const { token } = request.query
 
