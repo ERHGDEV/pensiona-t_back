@@ -42,7 +42,7 @@ const createVerificationEmail = (name, email, url) => {
                         <!-- Footer -->
                         <tr>
                         <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
-                            <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T</p>
+                            <p style="margin: 0; font-size: 12px; color: #666666;">© ${new Date().getFullYear()} Pensiona-T</p>
                         </td>
                         </tr>
                     </table>
@@ -99,7 +99,54 @@ const createRecoveryEmail = (name, email, url) => {
                                 <!-- Footer -->
                                 <tr>
                                     <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
-                                        <p style="margin: 0; font-size: 12px; color: #666666;">© 2024 Pensiona-T</p>
+                                        <p style="margin: 0; font-size: 12px; color: #666666;">© ${new Date().getFullYear()} Pensiona-T</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `,
+    }
+    
+    return msg
+}
+
+const createGeneralEmail = (subject, message) => {
+    const msg = {
+        from: config.FROM_EMAIL,
+        subject: subject,
+        html: `
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${subject}</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0;">
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 0;">
+                            <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+                                <!-- Header -->
+                                <tr>
+                                    <td style="background-color: #0c4a6e; padding: 20px; text-align: center;">
+                                        <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Pensiona-T</h1>
+                                    </td>
+                                </tr>
+                                <!-- Content -->
+                                <tr>
+                                    <td style="padding: 40px 30px;">
+                                        ${message}
+                                    </td>
+                                </tr>
+                                <!-- Footer -->
+                                <tr>
+                                    <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
+                                        <p style="margin: 0; font-size: 12px; color: #666666;">© ${new Date().getFullYear()} Pensiona-T</p>
                                     </td>
                                 </tr>
                             </table>
@@ -116,5 +163,6 @@ const createRecoveryEmail = (name, email, url) => {
 
 module.exports = {
     createVerificationEmail,
-    createRecoveryEmail
+    createRecoveryEmail,
+    createGeneralEmail
 }
