@@ -34,7 +34,7 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
             return response.json({ success: false, message: 'Cuenta no verificada, revisa tu bandeja de entrada' })
         }
   
-        user = await checkAndUpdateUserStatus(user)
+        /* user = await checkAndUpdateUserStatus(user) */
   
         if (user.status === 'inactive') {
             return response.json({ success: false, message: 'Usuario inactivo' })
