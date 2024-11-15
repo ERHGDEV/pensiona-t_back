@@ -8,7 +8,7 @@ const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
 const config = require('../utils/config')
 const logger = require('../utils/logger')
-const { createVerificationEmail, createRecoveryEmail } = require('../utils/emailTemplates')
+const { createVerificationEmail, createRecoveryEmail, createGeneralEmail } = require('../utils/emailTemplates')
 const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
 const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
 
@@ -214,6 +214,31 @@ usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (req
         response.json(formattedData)
     } catch (error) {
         logger.error('Error fetching login activity:', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Envía correo masivo a todos los usuarios
+usersRouter.post('/api/admin/send-bulk-email', verifyToken, verifyAdmin, async (request, response) => {
+    try {
+        const { subject, body } = request.body
+
+        if (!subject || !body) {
+            return response.json({ success: false, message: 'Asunto y mensaje requeridos'})
+        }
+
+        const users = await User.find({}, 'email')
+        const emails = users.map(user => user.email)
+
+        const msg = createGeneralEmail(subject, body)
+        msg.to = emails
+        
+        await sgMail.sendMultiple(msg)
+
+        logger.info(`Bulk email sent successfully to ${emails.length} users`)
+        response.json({ success: true, message: `Email enviado a ${emails.length} usuarios` }) 
+    } catch (error) {
+        logger.error('Error sending bulk email:', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
