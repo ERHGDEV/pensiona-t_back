@@ -83,7 +83,7 @@ const verifyAdmin = async (request, response, next) => {
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 100,
     message: {
         success: false,
         message: 'Has superado el límite de solicitudes. Intente nuevamente en 15 minutos'
