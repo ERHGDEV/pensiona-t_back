@@ -347,7 +347,11 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
         const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
 
+        console.log('SENDGRID_API_KEY está definida:', !!config.SENDGRID_API_KEY)
+        console.log('SENDGRID_FROM_EMAIL:', config.FROM_EMAIL)
+
         console.log('Intentando enviar correo con SendGrid')
+        console.log('Desde:', config.FROM_EMAIL)
         await sgMail.send(verificationEmail)
         console.log('Correo enviado exitosamente')
 
