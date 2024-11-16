@@ -346,6 +346,15 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
         response.json({ success: true, message: 'Usuario registrado, revisa tu bandeja de entrada' })
     } catch (error) {
         logger.error('Error during registration: ', error)
+        console.error('Error de SendGrid:', {
+            mensaje: error.message,
+            código: error.code,
+            respuesta: error.response ? {
+              cuerpo: error.response.body,
+              encabezados: error.response.headers,
+              estado: error.response.status
+            } : 'Sin respuesta'
+          })
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
