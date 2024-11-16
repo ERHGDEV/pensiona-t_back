@@ -338,10 +338,18 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
         })
 
         await newUser.save()
+
+        console.log('SendGrid API Key (primeros 5 caracteres):', config.SENDGRID_API_KEY ? config.SENDGRID_API_KEY.substring(0, 5) : 'No definida')
+
+
+
         //En local apunta a localhost, en producción apunta a la URL de producción
         const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
+
+        console.log('Intentando enviar correo con SendGrid')
         await sgMail.send(verificationEmail)
+        console.log('Correo enviado exitosamente')
 
         response.json({ success: true, message: 'Usuario registrado, revisa tu bandeja de entrada' })
     } catch (error) {
@@ -350,11 +358,11 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
             mensaje: error.message,
             código: error.code,
             respuesta: error.response ? {
-              cuerpo: error.response.body,
-              encabezados: error.response.headers,
-              estado: error.response.status
+            cuerpo: JSON.stringify(error.response.body),
+            encabezados: JSON.stringify(error.response.headers),
+            estado: error.response.status
             } : 'Sin respuesta'
-          })
+        })
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
