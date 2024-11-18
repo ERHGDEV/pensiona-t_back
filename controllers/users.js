@@ -304,10 +304,74 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
             email: user.email,
             role: user.role,
             expiration: user.expiration,
-            status: user.status
+            status: user.status,
+            created: user.created,
+            profileImage: user.profileImage || null,
+            calculosRealizados: user.calculosRealizados || 0,
+            reportesGenerados: user.reportesGenerados || 0
         })
     } catch (error) {
-        logger.error('Error during user check: ', error)
+        logger.error('Error during user fetch: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Actualiza el usuario actual, por el momento el name  
+usersRouter.put('/api/user/update', verifyToken, async (request, response) => {
+    try {
+        const { name } = request.body
+
+        if (!name) {
+            return response.status(400).json({ success: false, message: 'Nombre requerido' })
+        }
+
+        const user = await User.findById(request.userId)
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        user.name = name
+        await user.save()
+
+        response.json({ success: true, message: 'Usuario actualizado exitosamente' })
+    } catch (error) {
+        logger.error('Error during user update: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Incrementa el contador de cálculos realizados
+usersRouter.put('/api/user/increment-calculos', verifyToken, async (request, response) => {
+    try {
+        const user = await User.findById(request.userId)
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        user.calculosRealizados = (user.calculosRealizados || 0) + 1
+        await user.save()
+
+        response.json({ success: true, message: 'Contador de cálculos incrementado' })
+    } catch (error) {
+        logger.error('Error during calculations increment: ', error)
+        response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Incrementa el contador de reportes generados
+usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, response) => {
+    try {
+        const user = await User.findById(request.userId)
+        if (!user) {
+            return response.json({ success: false, message: 'Usuario no encontrado' })
+        }
+
+        user.reportesGenerados = (user.reportesGenerados || 0) + 1
+        await user.save()
+
+        response.json({ success: true, message: 'Contador de reportes incrementado' })
+    } catch (error) {
+        logger.error('Error during reports increment: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
