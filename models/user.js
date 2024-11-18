@@ -11,7 +11,9 @@ const userSchema = new mongoose.Schema({
     token: { type: String, default: null },
     verified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
-    recoveryToken: { type: String, default: null }
+    recoveryToken: { type: String, default: null },
+    calculosRealizados: { type: Number, default: 0 },
+    reportesGenerados: { type: Number, default: 0 }
 })
 
 module.exports = mongoose.model('User', userSchema)
