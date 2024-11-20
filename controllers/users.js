@@ -1,4 +1,5 @@
 const usersRouter = require('express').Router()
+const axios = require('axios')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
@@ -8,6 +9,7 @@ const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
 const config = require('../utils/config')
 const logger = require('../utils/logger')
+const { generarEmailAleatorio } = require('../utils/emailUtils')
 const { createVerificationEmail, createRecoveryEmail, createGeneralEmail } = require('../utils/emailTemplates')
 const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
 const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
@@ -308,7 +310,8 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
             created: user.created,
             profileImage: user.profileImage || null,
             calculosRealizados: user.calculosRealizados || 0,
-            reportesGenerados: user.reportesGenerados || 0
+            reportesGenerados: user.reportesGenerados || 0,
+            aforesConsultadas: user.aforesConsultadas || 0
         })
     } catch (error) {
         logger.error('Error during user fetch: ', error)
@@ -373,6 +376,52 @@ usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, res
     } catch (error) {
         logger.error('Error during reports increment: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
+    }
+})
+
+// Endpoint para hacer la solicitud de consulta de AFORE
+usersRouter.post('/api/afore-info', verifyToken, async (req, res) => {
+    const { nss } = req.body;
+
+  if (!nss) {
+    return res.status(400).json({
+        error: 'El campo nss es obligatorio.',
+    })
+  }
+
+  const emailAleatorio = generarEmailAleatorio()
+
+  const url = `https://api.esar.io/sartoken/externos/web/localizatuafore/afore/${emailAleatorio}/nss/${nss}`
+
+  try {
+    const response = await axios.get(url, {
+        headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            Origin: 'https://www.aforeweb.com.mx',
+            Referer: 'https://www.aforeweb.com.mx/',
+        },
+    })
+
+    if (response.data.claveAfore !== null) {
+        const user = await User.findById(req.userId)
+
+        if (user) {
+            user.aforesConsultadas = (user.aforesConsultadas || 0) + 1
+            await user.save()
+            logger.info('Usuario:', req.userId, 'consultó AFORE:', response.data.claveAfore)
+        } else {
+            logger.error('Usuario no encontrado:', req.userId)
+        }
+    }
+
+    res.status(response.status).json(response.data.claveAfore)
+    } catch (error) {
+        logger.error('Error al hacer la solicitud:', error.message)
+        res.status(error.response?.status || 500).json({
+            error: 'Error al obtener los datos de AFORE.',
+            detalles: error.response?.data || error.message,
+        })
     }
 })
 

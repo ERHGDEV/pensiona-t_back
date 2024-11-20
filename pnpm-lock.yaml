@@ -11,6 +11,9 @@ importers:
       '@sendgrid/mail':
         specifier: ^8.1.4
         version: 8.1.4
+      axios:
+        specifier: ^1.7.7
+        version: 1.7.7
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
