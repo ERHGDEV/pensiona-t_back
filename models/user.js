@@ -13,7 +13,8 @@ const userSchema = new mongoose.Schema({
     verificationToken: { type: String, default: null },
     recoveryToken: { type: String, default: null },
     calculosRealizados: { type: Number, default: 0 },
-    reportesGenerados: { type: Number, default: 0 }
+    reportesGenerados: { type: Number, default: 0 },
+    aforesConsultadas: { type: Number, default: 0 }
 })
 
 module.exports = mongoose.model('User', userSchema)
