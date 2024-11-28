@@ -425,6 +425,69 @@ usersRouter.post('/api/afore-info', verifyToken, async (req, res) => {
     }
 })
 
+// Consulta bulk de afore
+usersRouter.post('/api/batch-afore-info', verifyToken, async (req, res) => {
+  const { nssArray } = req.body
+
+  if (!Array.isArray(nssArray) || nssArray.length === 0 || nssArray.length > 100) {
+    return res.status(400).json({
+      error: 'El array de NSS debe contener entre 1 y 100 elementos.',
+    })
+  }
+
+  const results = []
+  let successfulQueries = 0
+
+  for (const nss of nssArray) {
+    const nssString = nss.toString();
+    if (nssString.length !== 11 || !/^\d+$/.test(nssString)) {
+      results.push({ nss, afore: 'Formato inválido' })
+      continue
+    }
+
+    const emailAleatorio = generarEmailAleatorio()
+    const url = `https://api.esar.io/sartoken/externos/web/localizatuafore/afore/${emailAleatorio}/nss/${nssString}`
+
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Origin: 'https://www.aforeweb.com.mx',
+          Referer: 'https://www.aforeweb.com.mx/',
+        },
+      })
+
+      if (response.data.claveAfore !== null) {
+        results.push({ nss, afore: response.data.claveAfore })
+        successfulQueries++
+      } else {
+        results.push({ nss, afore: 'Intenta de nuevo mañana' })
+      }
+    } catch (error) {
+      logger.error(`Error al consultar AFORE para NSS ${nss}:`, error.message)
+      results.push({ nss, afore: 'Error en la consulta' })
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+
+  try {
+    const user = await User.findById(req.userId)
+    if (user) {
+      user.aforesConsultadas = (user.aforesConsultadas || 0) + successfulQueries
+      await user.save()
+      logger.info(`Usuario ${req.userId} consultó ${successfulQueries} AFOREs exitosamente`)
+    } else {
+      logger.error('Usuario no encontrado:', req.userId)
+    }
+  } catch (error) {
+    logger.error('Error al actualizar aforesConsultadas del usuario:', error)
+  }
+
+  res.json(results)
+})
+
 // Registra un nuevo usuario, envía correo de verificación y guarda token de verificación
 usersRouter.post('/api/register', limiter, async (request, response) => {
     const { name, email, password } = request.body
