@@ -124,7 +124,6 @@ usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, r
         })
 
         await newUser.save()
-        //En local apunta a localhost, en producción apunta a la URL de producción
         const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
         await sgMail.send(verificationEmail)
@@ -452,9 +451,6 @@ usersRouter.post('/api/register', limiter, async (request, response) => {
 
         await newUser.save()
 
-        console.log('SendGrid API Key (primeros 5 caracteres):', config.SENDGRID_API_KEY ? config.SENDGRID_API_KEY.substring(0, 5) : 'No definida')
-
-        //En local apunta a localhost, en producción apunta a la URL de producción
         const verificationUrl = `${config.URL_FRONTEND}/verify?token=${verificationToken}`
         const verificationEmail = createVerificationEmail(name, email, verificationUrl)
         await sgMail.send(verificationEmail)
@@ -480,7 +476,6 @@ usersRouter.post('/api/recovery', limiter, async (request, response) => {
         user.recoveryToken = recoveryToken
         await user.save()
 
-        //En local apunta a localhost, en producción apunta a la URL de producción
         const recoveryUrl = `${config.URL_FRONTEND}/recovery?token=${recoveryToken}`
         const recoveryEmail = createRecoveryEmail(user.name, email, recoveryUrl)
         await sgMail.send(recoveryEmail)
