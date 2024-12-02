@@ -27,7 +27,7 @@ const createVerificationEmail = (name, email, url) => {
                         <!-- Content -->
                         <tr>
                         <td style="padding: 40px 30px;">
-                            <h2 style="color: #0c4a6e; margin-top: 0;">Bienvenido, ${name}!</h2>
+                            <h2 style="color: #0c4a6e; margin-top: 0;">Bienvenid@, ${name}!</h2>
                             <p style="margin-bottom: 20px;">Gracias por registrarte en Pensiona-T. Por favor, verifica tu dirección de correo electrónico haciendo clic en el siguiente botón:</p>
                             <table role="presentation" style="width: 100%;">
                             <tr>
