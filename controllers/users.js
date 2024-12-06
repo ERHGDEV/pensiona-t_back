@@ -182,11 +182,12 @@ usersRouter.delete('/api/admin/users/:id', verifyToken, verifyAdmin, async (requ
 
 // Obtiene el historial de inicio de sesión por día de un rango de fechas
 usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (request, response) => {
-    const { start, end } = request.query
+    const { start, end } = request.query;
 
     try {
-        const startDate = startOfDay(parseISO(start))
-        const endDate = endOfDay(parseISO(end))
+        const startDate = startOfDay(parseISO(start));
+        const endDate = endOfDay(parseISO(end));
+        const timeZoneOffset = -6;
 
         const loginData = await LoginHistory.aggregate([
             {
@@ -195,9 +196,20 @@ usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (req
                 }
             },
             {
+                $addFields: {
+                    adjustedDate: {
+                        $dateAdd: {
+                            startDate: "$loginDate",
+                            unit: "hour",
+                            amount: timeZoneOffset
+                        }
+                    }
+                }
+            },
+            {
                 $group: {
                     _id: {
-                        $dateToString: { format: "%Y-%m-%d", date: "$loginDate" }
+                        $dateToString: { format: "%Y-%m-%d", date: "$adjustedDate" }
                     },
                     count: { $sum: 1 }
                 }
@@ -205,19 +217,19 @@ usersRouter.get('/api/admin/login-history', verifyToken, verifyAdmin, async (req
             {
                 $sort: { _id: 1 }
             }
-        ])
+        ]);
 
         const formattedData = loginData.map(item => ({
             date: item._id,
             count: item.count
-        }))
+        }));
 
-        response.json(formattedData)
+        response.json(formattedData);
     } catch (error) {
-        logger.error('Error fetching login activity:', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
+        logger.error('Error fetching login activity:', error);
+        response.status(500).json({ success: false, message: 'Error en el servidor' });
     }
-})
+});
 
 // Envía correo masivo a todos los usuarios
 usersRouter.post('/api/admin/send-bulk-email', verifyToken, verifyAdmin, async (request, response) => {
