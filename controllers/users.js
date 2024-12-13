@@ -10,6 +10,7 @@ const LoginHistory = require('../models/loginHistory')
 const config = require('../utils/config')
 const logger = require('../utils/logger')
 const { generarEmailAleatorio } = require('../utils/emailUtils')
+const { consultarAfore } = require('../utils/consultarAfore')
 const { createVerificationEmail, createRecoveryEmail, createGeneralEmail } = require('../utils/emailTemplates')
 const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
 const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
@@ -390,7 +391,7 @@ usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, res
     }
 })
 
-// Endpoint para hacer la solicitud de consulta de AFORE
+// Endpoint para hacer la solicitud de consulta de AFORE por NSS
 usersRouter.post('/api/afore-info', verifyToken, async (req, res) => {
     const { nss } = req.body;
 
@@ -400,33 +401,31 @@ usersRouter.post('/api/afore-info', verifyToken, async (req, res) => {
     })
   }
 
-  const emailAleatorio = generarEmailAleatorio()
-
-  const url = `https://api.esar.io/sartoken/externos/web/localizatuafore/afore/${emailAleatorio}/nss/${nss}`
-
   try {
-    const response = await axios.get(url, {
-        headers: {
-            Accept: 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            Origin: 'https://www.aforeweb.com.mx',
-            Referer: 'https://www.aforeweb.com.mx/',
-        },
-    })
+    const response = await consultarAfore('nss', nss, req.userId)
+    res.status(response.status).json(response.data.claveAfore)
+    } catch (error) {
+        logger.error('Error al hacer la solicitud:', error.message)
+        res.status(error.response?.status || 500).json({
+            error: 'Error al obtener los datos de AFORE.',
+            detalles: error.response?.data || error.message,
+        })
+    }
+})
 
-    if (response.data.claveAfore !== null) {
-        const user = await User.findById(req.userId)
+// Endpoint para hacer la solicitud de consulta de AFORE por CURP
+usersRouter.post('/api/afore-info-curp', verifyToken, async (req, res) => {
+    const { curp } = req.body
 
-        if (user) {
-            user.aforesConsultadas = (user.aforesConsultadas || 0) + 1
-            await user.save()
-            logger.info('Usuario:', req.userId, 'consultó AFORE:', response.data.claveAfore)
-        } else {
-            logger.error('Usuario no encontrado:', req.userId)
-        }
+    if (!curp) {
+        return res.status(400).json({
+            error: 'El campo CURP es obligatorio.',
+        })
     }
 
-    res.status(response.status).json(response.data.claveAfore)
+    try {
+        const response = await consultarAfore('curp', curp, req.userId)
+        res.status(response.status).json(response.data.claveAfore)
     } catch (error) {
         logger.error('Error al hacer la solicitud:', error.message)
         res.status(error.response?.status || 500).json({
