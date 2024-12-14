@@ -392,47 +392,47 @@ usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, res
 })
 
 // Endpoint para hacer la solicitud de consulta de AFORE por NSS
-usersRouter.post('/api/afore-info', verifyToken, async (req, res) => {
-    const { nss } = req.body;
+usersRouter.post('/api/afore-info-nss', verifyToken, async (req, res) => {
+  const { nss } = req.body;
 
   if (!nss) {
     return res.status(400).json({
-        error: 'El campo nss es obligatorio.',
+      error: 'El campo nss es obligatorio.',
     })
   }
 
   try {
     const response = await consultarAfore('nss', nss, req.userId)
-    res.status(response.status).json(response.data.claveAfore)
-    } catch (error) {
-        logger.error('Error al hacer la solicitud:', error.message)
-        res.status(error.response?.status || 500).json({
-            error: 'Error al obtener los datos de AFORE.',
-            detalles: error.response?.data || error.message,
-        })
-    }
+    res.status(response.status).json(response.data)
+  } catch (error) {
+    logger.error('Error al hacer la solicitud:', error.message)
+    res.status(error.response?.status || 500).json({
+      error: 'Error al obtener los datos de AFORE.',
+      detalles: error.response?.data || error.message,
+    })
+  }
 })
 
 // Endpoint para hacer la solicitud de consulta de AFORE por CURP
 usersRouter.post('/api/afore-info-curp', verifyToken, async (req, res) => {
-    const { curp } = req.body
+  const { curp } = req.body
 
-    if (!curp) {
-        return res.status(400).json({
-            error: 'El campo CURP es obligatorio.',
-        })
-    }
+  if (!curp) {
+    return res.status(400).json({
+      error: 'El campo CURP es obligatorio.',
+    })
+  }
 
-    try {
-        const response = await consultarAfore('curp', curp, req.userId)
-        res.status(response.status).json(response.data.claveAfore)
-    } catch (error) {
-        logger.error('Error al hacer la solicitud:', error.message)
-        res.status(error.response?.status || 500).json({
-            error: 'Error al obtener los datos de AFORE.',
-            detalles: error.response?.data || error.message,
-        })
-    }
+  try {
+    const response = await consultarAfore('curp', curp, req.userId)
+    res.status(response.status).json(response.data)
+  } catch (error) {
+    logger.error('Error al hacer la solicitud:', error.message)
+    res.status(error.response?.status || 500).json({
+      error: 'Error al obtener los datos de AFORE.',
+      detalles: error.response?.data || error.message,
+    })
+  }
 })
 
 // Consulta bulk de afore
