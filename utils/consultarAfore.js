@@ -1,4 +1,5 @@
 const { generarEmailAleatorio } = require('./emailUtils')
+const { incrementUserCounter } = require('./incrementUserCounter')
 const axios = require('axios')
 const User = require('../models/user')
 
@@ -16,12 +17,7 @@ const consultarAfore = async (tipo, valor, userId) => {
     })
 
     if (response.data.claveAfore !== null) {
-        const user = await User.findById(userId)
-        
-        if (user) {
-            user.aforesConsultadas = (user.aforesConsultadas || 0) + 1
-            await user.save()
-        } 
+        await incrementUserCounter(userId, 'aforesConsultadas')
     }
 
     return response
