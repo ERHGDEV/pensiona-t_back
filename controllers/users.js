@@ -11,6 +11,7 @@ const config = require('../utils/config')
 const logger = require('../utils/logger')
 const { generarEmailAleatorio } = require('../utils/emailUtils')
 const { consultarAfore } = require('../utils/consultarAfore')
+const { incrementUserCounter } = require('../utils/incrementUserCounter')
 const { createVerificationEmail, createRecoveryEmail, createGeneralEmail } = require('../utils/emailTemplates')
 const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
 const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
@@ -358,36 +359,20 @@ usersRouter.put('/api/user/update', verifyToken, async (request, response) => {
 // Incrementa el contador de cálculos realizados
 usersRouter.put('/api/user/increment-calculos', verifyToken, async (request, response) => {
     try {
-        const user = await User.findById(request.userId)
-        if (!user) {
-            return response.json({ success: false, message: 'Usuario no encontrado' })
-        }
-
-        user.calculosRealizados = (user.calculosRealizados || 0) + 1
-        await user.save()
-
-        response.json({ success: true, message: 'Contador de cálculos incrementado' })
+        const result = await incrementUserCounter(request.userId, 'calculosRealizados')
+        response.json(result)
     } catch (error) {
-        logger.error('Error during calculations increment: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
+        response.status(500).json({ success: false, message: error.message })
     }
 })
 
 // Incrementa el contador de reportes generados
 usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, response) => {
     try {
-        const user = await User.findById(request.userId)
-        if (!user) {
-            return response.json({ success: false, message: 'Usuario no encontrado' })
-        }
-
-        user.reportesGenerados = (user.reportesGenerados || 0) + 1
-        await user.save()
-
-        response.json({ success: true, message: 'Contador de reportes incrementado' })
+        const result = await incrementUserCounter(request.userId, 'reportesGenerados')
+        response.json(result)
     } catch (error) {
-        logger.error('Error during reports increment: ', error)
-        response.status(500).json({ success: false, message: 'Error en el servidor' })
+        response.status(500).json({ success: false, message: error.message })
     }
 })
 
