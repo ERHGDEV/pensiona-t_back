@@ -59,7 +59,7 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
         user.token = token
         await user.save()
 
-        if (user.email !== 'pensionat.calculadora@gmail.com' &&
+        if (user.email !== 'contacto@pensiona-t.com' &&
             user.email !== 'erhgdev@gmail.com' &&
             user.email !== 'erickrhernandezg@gmail.com' &&
             user.email !== 'ericardohernandezg@gmail.com'    
@@ -324,7 +324,8 @@ usersRouter.get('/api/user', verifyToken, async (request, response) => {
             profileImage: user.profileImage || null,
             calculosRealizados: user.calculosRealizados || 0,
             reportesGenerados: user.reportesGenerados || 0,
-            aforesConsultadas: user.aforesConsultadas || 0
+            aforesConsultadas: user.aforesConsultadas || 0,
+            pdfAnalizados: user.pdfAnalizados || 0
         })
     } catch (error) {
         logger.error('Error during user fetch: ', error)
@@ -370,6 +371,16 @@ usersRouter.put('/api/user/increment-calculos', verifyToken, async (request, res
 usersRouter.put('/api/user/increment-reportes', verifyToken, async (request, response) => {
     try {
         const result = await incrementUserCounter(request.userId, 'reportesGenerados')
+        response.json(result)
+    } catch (error) {
+        response.status(500).json({ success: false, message: error.message })
+    }
+})
+
+// Incrementa el contador de PDFs analizados
+usersRouter.put('/api/user/increment-pdf', verifyToken, async (request, response) => {
+    try {
+        const result = await incrementUserCounter(request.userId, 'pdfAnalizados')
         response.json(result)
     } catch (error) {
         response.status(500).json({ success: false, message: error.message })
