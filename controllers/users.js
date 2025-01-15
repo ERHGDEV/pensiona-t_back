@@ -59,7 +59,7 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
         user.token = token
         await user.save()
 
-        if (user.email !== 'pensionat.calculadora@gmail.com' &&
+        if (user.email !== 'contacto@pensiona-t.com' &&
             user.email !== 'erhgdev@gmail.com' &&
             user.email !== 'erickrhernandezg@gmail.com' &&
             user.email !== 'ericardohernandezg@gmail.com'    
