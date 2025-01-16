@@ -497,7 +497,7 @@ usersRouter.post('/api/batch-afore-info', verifyToken, async (req, res) => {
       results.push({ nss, afore: 'Error en la consulta' })
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise(resolve => setTimeout(resolve, 100))
   }
 
   try {
