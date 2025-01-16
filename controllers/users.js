@@ -93,12 +93,34 @@ usersRouter.post('/api/logout', verifyToken, async (request, response) => {
 usersRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response) => {
     try {
         const users = await User.find({ role: { $ne: 'admin' } }).select('-password')
-        response.json(users)
+
+        const loginHistories = await LoginHistory.aggregate([
+            { $sort: { loginDate: -1 } }, // Ordenar por fecha de inicio de sesión descendente
+            {
+                $group: {
+                    _id: "$email",
+                    lastLogin: { $first: "$loginDate" }, // Obtener el último inicio de sesión
+                },
+            },
+        ])
+
+        const loginMap = loginHistories.reduce((map, history) => {
+            map[history._id] = history.lastLogin
+            return map
+        }, {})
+
+        const usersWithLastLogin = users.map((user) => ({
+            ...user.toObject(),
+            lastLogin: loginMap[user.email] || null, // Agregar el último inicio de sesión o null si no existe
+        }))
+
+        response.json(usersWithLastLogin)
     } catch (error) {
-        logger.error('Error feching users: ', error)
+        logger.error('Error fetching users: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
+
 
 // Crea un nuevo usuario, envía correo de verificación y guarda token de verificación
 usersRouter.post('/api/admin/users', verifyToken, verifyAdmin, async (request, response) => {
