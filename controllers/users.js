@@ -28,7 +28,7 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
     const { email, password } = request.body
   
     try {
-        let user = await User.findOne({ email })
+        let user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
   
         if (!user) {
             return response.json({ success: false, message: 'Usuario incorrecto' })
