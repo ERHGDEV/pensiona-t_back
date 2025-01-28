@@ -45,25 +45,44 @@ const verifyToken = async (request, response, next) => {
     const token = request.headers['authorization']?.split(' ')[1]
 
     if (!token) {
-        return response.status(403).json({ success: false, menssage: 'No se proporcionó token'})
+        return response.status(401).json({ 
+            success: false, 
+            message: 'No se proporcionó el token en el encabezado Authorization' 
+        })
     }
 
     try {
         const decoded = jwt.verify(token, config.JWT_SECRET)
         const user = await User.findById(decoded.userId)
 
-        if (!user || user.token !== token) {
-            return response.status(403).json({ success: false, menssage: 'Token inválido. Por favor, inicie sesión nuevamente'})
+        if (!user) {
+            return response.status(401).json({ 
+                success: false, 
+                message: 'Usuario no encontrado. Por favor, inicie sesión nuevamente' 
+            })
+        }
+
+        if (user.token !== token) {
+            return response.status(401).json({ 
+                success: false, 
+                message: 'Token inválido. Por favor, inicie sesión nuevamente' 
+            })
         }
 
         request.userId = decoded.userId
         next()
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
-            return response.status(403).json({ success: false, menssage: 'Token expirado. Por favor, inicie sesión nuevamente'})
+            return response.status(401).json({ 
+                success: false, 
+                message: 'Token expirado. Por favor, inicie sesión nuevamente' 
+            })
         } else {
             logger.error('Error durante la verificación del token: ', error)
-            return response.status(401).json({ success: false, message: 'No autorizado' })
+            return response.status(401).json({ 
+                success: false, 
+                message: 'No autorizado' 
+            })
         }
     }
 }
