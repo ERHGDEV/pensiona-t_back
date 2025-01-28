@@ -14,7 +14,7 @@ const { consultarAfore } = require('../utils/consultarAfore')
 const { incrementUserCounter } = require('../utils/incrementUserCounter')
 const { createVerificationEmail, createRecoveryEmail, createGeneralEmail } = require('../utils/emailTemplates')
 const { checkAndUpdateUserStatus, verifyToken, verifyAdmin, limiter } = require('../utils/middleware')
-const { generateUniqueToken, invalidatePreviousToken } = require('../utils/tokenUtils')
+const { generateAccessToken, generateRefreshToken, invalidatePreviousToken } = require('../utils/tokenUtils')
 
 sgMail.setApiKey(config.SENDGRID_API_KEY)
 
@@ -54,9 +54,11 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
             await invalidatePreviousToken(user._id)
         }
   
-        const token = generateUniqueToken(user)
+        const token = generateAccessToken(user)
+        const refreshToken = generateRefreshToken(user)
   
         user.token = token
+        user.refreshToken = refreshToken
         await user.save()
 
         if (user.email !== 'contacto@pensiona-t.com' &&
@@ -71,17 +73,61 @@ usersRouter.post('/api/login', limiter, async (request, response) => {
             })
         }
   
-            response.json({ success: true, email: user.email, role: user.role, token })
+            response.json({ 
+                success: true, 
+                email: user.email, 
+                role: user.role, 
+                token, 
+                refreshToken 
+            })
     } catch (error) {
         logger.error('Error durante el inicio de sesión: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
 
+// Renueva el token de acceso del usuario
+usersRouter.post('/api/refresh-token', async (request, response) => {
+    const { refreshToken } = request.body
+
+    if (!refreshToken) {
+        return response.status(400).json({ success: false, message: 'Refresh token no proporcionado' })
+    }
+
+    try {
+        const decoded = jwt.verify(refreshToken, config.JWT_REFRESH_SECRET)
+        const user = await User.findById(decoded.userId)
+
+        if (!user || user.refreshToken !== refreshToken) {
+            return response.status(403).json({ success: false, message: 'Refresh token inválido' })
+        }
+
+        
+        const newAccessToken = generateAccessToken(user)
+
+        response.json({
+            success: true,
+            accessToken: newAccessToken
+        })
+    } catch (error) {
+        if (error instanceof jwt.TokenExpiredError) {
+            return response.status(403).json({ success: false, message: 'Refresh token expirado' })
+        } else {
+            logger.error('Error durante la renovación del token: ', error)
+            return response.status(500).json({ success: false, message: 'Error en el servidor' })
+        }
+    }
+})
+
 // Cierra la sesión del usuario, invalida el token actual
 usersRouter.post('/api/logout', verifyToken, async (request, response) => {
     try {
-        await invalidatePreviousToken(request.userId)
+        const user = await User.findById(request.userId)
+        if (user) {
+            user.token = null
+            user.refreshToken = null
+            await user.save()
+        }
         response.json({ success: true, message: 'Sesión cerrada' })
     } catch (error) {
         logger.error('Error durante el cierre de sesión: ', error)
