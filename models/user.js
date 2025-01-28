@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
     created: { type: Date, default: Date.now },
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     token: { type: String, default: null },
+    refreshToken: { type: String, default: null },
     verified: { type: Boolean, default: false },
     verificationToken: { type: String, default: null },
     recoveryToken: { type: String, default: null },
