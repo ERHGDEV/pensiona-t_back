@@ -104,7 +104,9 @@ usersRouter.post('/api/refresh-token', async (request, response) => {
 
         
         const newAccessToken = generateAccessToken(user)
-
+        user.token = newAccessToken
+        await user.save()
+        
         response.json({
             success: true,
             accessToken: newAccessToken
