@@ -34,8 +34,12 @@ const errorHandler = (error, request, response, next) => {
 
 const checkAndUpdateUserStatus = async (user) => {
     const currentDate = new Date()
-    if (currentDate > user.expiration && user.status === 'active') {
-      user.status = 'inactive'
+    if (user.subscription === 'free') {
+      return user
+    }
+
+    if (currentDate > user.expiration) {
+      user.subscription = 'free'
       await user.save()
     }
     return user
@@ -69,7 +73,12 @@ const verifyToken = async (request, response, next) => {
             })
         }
 
-        request.userId = decoded.userId
+        request.user = {
+            id: user._id,
+            email: user.email,
+            role: user.role
+        }
+
         next()
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
@@ -87,11 +96,10 @@ const verifyToken = async (request, response, next) => {
     }
 }
 
-const verifyAdmin = async (request, response, next) => {
+const verifyAdmin = (request, response, next) => {
     try {
-        const user = await User.findById(request.userId)
-        if (user.role !== 'admin') {
-            return response.status(403).json({ success: false, message: 'No autorizado'})
+        if (request.user.role !== 'admin') {
+            return response.status(403).json({ success: false, message: 'No autorizado' })
         }
         next()
     } catch (error) {
