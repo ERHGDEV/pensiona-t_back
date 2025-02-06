@@ -1,11 +1,13 @@
 const express = require('express')
 const mongoose = require('mongoose')
 const cors = require('cors')
-
 const config = require('./utils/config')
 const logger = require('./utils/logger')
 const middleware = require('./utils/middleware')
 const usersRouter = require('./controllers/users')
+const adminRouter = require('./controllers/admin')
+const paymentsRouter = require('./controllers/payments')
+const publicRouter = require('./controllers/public')
 
 const app = express()
 
@@ -25,7 +27,10 @@ app.use(cors())
 app.use(express.json())
 app.use(middleware.requestLogger)
 
+app.use('/', publicRouter)
 app.use('/', usersRouter)
+app.use('/', adminRouter)
+app.use('/', paymentsRouter)
 
 app.use(middleware.unknownEndpoint)
 app.use(middleware.errorHandler)
