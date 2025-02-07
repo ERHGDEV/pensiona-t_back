@@ -43,7 +43,7 @@ paymentsRouter.post('/api/create_preference', verifyToken, async (req, res) => {
                 ],
                 installments: 1,            // Número de meses sin intereses
             },
-            notification_url: `${config.URL_WEBHOOK}/api/payments/webhook?source_news=webhooks`,  //Actualizar antes de producción
+            notification_url: `${config.URL_WEBHOOK}/api/payments/webhook?source_news=webhooks`,
             statement_descriptor: 'PENSIONA-T',
             external_reference: externalReference,
         }
