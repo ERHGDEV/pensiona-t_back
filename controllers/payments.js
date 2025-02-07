@@ -36,19 +36,14 @@ paymentsRouter.post('/api/create_preference', verifyToken, async (req, res) => {
             },
             auto_return: 'approved',
             payment_methods: {
-                excluded_payment_methods: [
-                    { 
-                        id: 'amex' 
-                    }
-                ],
                 excluded_payment_types: [
-                    { 
-                        id: 'atm' 
-                    }
+                    { id: 'ticket' },         // Excluye pagos en efectivo (OXXO, etc.)
+                    { id: 'bank_transfer' },  // Excluye transferencias bancarias
+                    { id: 'atm' }             // Excluye pagos en cajeros automáticos
                 ],
-                installments: 1,
+                installments: 1,            // Número de meses sin intereses
             },
-            notification_url: "https://f815-187-102-205-10.ngrok-free.app/api/payments/webhook",  //Actualizar antes de producción
+            notification_url: `${config.URL_WEBHOOK}/api/payments/webhook?source_news=webhooks`,  //Actualizar antes de producción
             statement_descriptor: 'PENSIONA-T',
             external_reference: externalReference,
         }
@@ -144,6 +139,18 @@ paymentsRouter.post('/api/payments/webhook', async (req, res) => {
                     await user.save()
 
                     console.log(`Usuario ${user.email} actualizado: suscripción ${newSubscription}, vence el ${newExpiration}`)
+                }
+            }
+
+            // Si el pago fue devuelto, actualizar la suscripción del usuario
+            if (status === 'refunded') {
+                const user = await User.findOne({ email: userEmail })
+
+                if (user) {
+                    user.subscription = 'free'
+                    await user.save()
+
+                    console.log(`Usuario ${user.email} actualizado: suscripción free`)
                 }
             }
         }
