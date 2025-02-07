@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken')
 const sgMail = require('@sendgrid/mail')
 const { startOfDay, endOfDay, parseISO } = require('date-fns')
 const User = require('../models/user')
+const Preference = require('../models/preference')
+const Payment = require('../models/payment')
 const Values = require('../models/values')
 const LoginHistory = require('../models/loginHistory')
 const config = require('../utils/config')
@@ -18,12 +20,13 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
     try {
         const users = await User.find({ role: { $ne: 'admin' } }).select('-password')
 
+        // Obtener el último inicio de sesión de cada usuario
         const loginHistories = await LoginHistory.aggregate([
-            { $sort: { loginDate: -1 } }, // Ordenar por fecha de inicio de sesión descendente
+            { $sort: { loginDate: -1 } },
             {
                 $group: {
                     _id: "$email",
-                    lastLogin: { $first: "$loginDate" }, // Obtener el último inicio de sesión
+                    lastLogin: { $first: "$loginDate" },
                 },
             },
         ])
@@ -33,14 +36,41 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
             return map
         }, {})
 
+        // Obtener los correos electrónicos de los usuarios
+        const emails = users.map(user => user.email)
+        
+        // Buscar preferencias asociadas a los usuarios
+        const preferences = await Preference.find({ email: { $in: emails } })
+        const externalReferences = preferences.reduce((map, pref) => {
+            map[pref.external_reference] = pref.email
+            return map
+        }, {})
+
+        // Buscar pagos relacionados con las external_references
+        const payments = await Payment.find({ external_reference: { $in: Object.keys(externalReferences) } })
+
+        // Mapear pagos con su respectivo usuario
+        const paymentHistory = payments.map(payment => {
+            const email = externalReferences[payment.external_reference]
+            const user = users.find(user => user.email === email)
+            return {
+                user: user ? user.name : 'Desconocido',
+                email,
+                amount: payment.amount,
+                date: payment.transactionDate,
+                status: payment.status,
+                external_reference: payment.external_reference,
+            }
+        })
+
         const usersWithLastLogin = users.map((user) => ({
             ...user.toObject(),
-            lastLogin: loginMap[user.email] || null, // Agregar el último inicio de sesión o null si no existe
+            lastLogin: loginMap[user.email] || null,
         }))
 
-        response.json(usersWithLastLogin)
+        response.json({ users: usersWithLastLogin, payments: paymentHistory })
     } catch (error) {
-        logger.error('Error fetching users: ', error)
+        logger.error('Error fetching users and payments: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
     }
 })
