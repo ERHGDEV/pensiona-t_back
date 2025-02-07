@@ -34,6 +34,11 @@ const errorHandler = (error, request, response, next) => {
 
 const checkAndUpdateUserStatus = async (user) => {
     const currentDate = new Date()
+    if (!user.subscription) {
+        user.subscription = 'free'
+        await user.save()
+    }
+
     if (user.subscription === 'free') {
       return user
     }
