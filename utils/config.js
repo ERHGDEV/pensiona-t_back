@@ -13,6 +13,7 @@ const URL_FRONTEND = process.env.URL_FRONTEND
 const URL_BACKEND = process.env.URL_BACKEND
 const MERCADOPAGO_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN
 const URL_MASIVO = process.env.URL_MASIVO
+const URL_WEBHOOK = process.env.URL_WEBHOOK
 
 module.exports = {
     MONGODB_URI,
@@ -27,5 +28,6 @@ module.exports = {
     URL_FRONTEND,
     URL_BACKEND,
     MERCADOPAGO_ACCESS_TOKEN,
-    URL_MASIVO
+    URL_MASIVO,
+    URL_WEBHOOK
 }
