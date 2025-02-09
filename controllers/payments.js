@@ -6,6 +6,7 @@ const { verifyToken } = require('../utils/middleware')
 const User = require('../models/user') 
 const Payment = require('../models/payment') 
 const PreferenceModel = require('../models/preference')
+const WebhookNotification = require('../models/webhookNotification')
 const { v4: uuidv4 } = require('uuid')
 
 const mercadopago = new MercadoPagoConfig({
@@ -20,7 +21,9 @@ paymentsRouter.post('/api/create_preference', verifyToken, async (req, res) => {
         const body = {
             items: [
                 {
+                    id: externalReference,
                     title: req.body.title,
+                    description: req.body.title,
                     quantity: req.body.quantity,
                     currency_id: 'MXN',
                     unit_price: req.body.unit_price,
@@ -84,6 +87,18 @@ paymentsRouter.post('/api/payments/webhook', async (req, res) => {
     const payment = req.body
 
     try {
+        // Guardar la notificación en la base de datos
+        await WebhookNotification.create({
+            action: payment.action,
+            api_version: payment.api_version,
+            data: { id: payment.data.id },
+            date_created: payment.date_created,
+            notification_id: payment.id,
+            live_mode: payment.live_mode,
+            type: payment.type,
+            user_id: payment.user_id,
+        })
+
         if (payment.action === 'payment.created' || payment.action === 'payment.updated') {
             // Obtener información del pago desde MercadoPago
             const paymentInfo = await axios.get(`https://api.mercadopago.com/v1/payments/${payment.data.id}`, {
