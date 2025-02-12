@@ -252,9 +252,9 @@ usersRouter.post('/api/batch-afore-info', verifyToken, async (req, res) => {
     if (user) {
       user.aforesConsultadas = (user.aforesConsultadas || 0) + successfulQueries
       await user.save()
-      logger.info(`Usuario ${req.userId} consultó ${successfulQueries} AFOREs exitosamente`)
+      logger.info(`Usuario ${req.user.id} consultó ${successfulQueries} AFOREs exitosamente`)
     } else {
-      logger.error('Usuario no encontrado:', req.userId)
+      logger.error('Usuario no encontrado:', req.user.id)
     }
   } catch (error) {
     logger.error('Error al actualizar aforesConsultadas del usuario:', error)
