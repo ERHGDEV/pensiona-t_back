@@ -23,8 +23,6 @@ publicRouter.post('/api/login', limiter, async (request, response) => {
   
     try {
         let user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } })
-  
-        user = await checkAndUpdateUserStatus(user)
 
         if (!user) {
             return response.json({ success: false, message: 'Usuario incorrecto' })
@@ -43,6 +41,8 @@ publicRouter.post('/api/login', limiter, async (request, response) => {
         if (!isMatch) {
             return response.json({ success: false, message: 'Contraseña incorrecta' })
         }
+
+        user = await checkAndUpdateUserStatus(user)
   
         if (user.token) {
             await invalidatePreviousToken(user._id)
