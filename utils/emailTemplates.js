@@ -61,7 +61,7 @@ const createRecoveryEmail = (name, email, url) => {
     const msg = {
         to: email,
         from: config.FROM_EMAIL,
-        subject: 'Recupera tu contraseña en Pensiona-T',
+        subject: 'Recupera tu contraseña de Pensiona-T',
         html: `
             <!DOCTYPE html>
             <html lang="es">
@@ -161,8 +161,87 @@ const createGeneralEmail = (subject, message) => {
     return msg
 }
 
+const subscriptionNormalize = (subscription) => {
+    if (subscription === 'unlimited') {
+        return 'Unlimited'
+    } else if (subscription === 'pro') {
+        return 'Pro'
+    } else if (subscription === 'free') {
+        return 'Free'
+    }
+}
+
+const formatDate = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('es-MX', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+}
+
+const createPaymentConfirmationEmail = (name, email, subscription, expiration, reference) => {
+    const msg = {
+        to: email,
+        from: config.FROM_EMAIL,
+        subject: 'Confirmación de pago de Pensiona-T',
+        html: `
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Confirmación de Pago</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333; margin: 0; padding: 0;">
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 0;">
+                            <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+                                <!-- Header -->
+                                <tr>
+                                    <td style="background-color: #0c4a6e; padding: 20px; text-align: center;">
+                                        <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Pensiona-T</h1>
+                                    </td>
+                                </tr>
+                                <!-- Content -->
+                                <tr>
+                                    <td style="padding: 40px 30px;">
+                                        <h2 style="color: #0c4a6e; margin-top: 0;">¡Hola, ${name}!</h2>
+                                        <p style="margin-bottom: 20px;">Tu pago ha sido aprobado y acreditado correctamente. Ya puedes disfrutar de los beneficios de tu suscripción.</p>
+                                        <p><strong>Suscripción:</strong> ${subscriptionNormalize(subscription)}</p>
+                                        <p><strong>Vence el:</strong> ${formatDate(expiration)}</p>
+                                        <p><strong>Referencia de pago:</strong> ${reference}</p>
+                                        <table role="presentation" style="width: 100%; margin-top: 20px;">
+                                            <tr>
+                                                <td style="text-align: center;">
+                                                    <a href="${config.URL_FRONTEND}/login" style="display: inline-block; background-color: #0ea5e9; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: bold;">Entrar</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <!-- Footer -->
+                                <tr>
+                                    <td style="background-color: #f3f4f6; padding: 20px; text-align: center;">
+                                        <p style="margin: 0; font-size: 12px; color: #666666;">© ${new Date().getFullYear()} Pensiona-T</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `,
+    }
+
+    return msg
+}
+
 module.exports = {
     createVerificationEmail,
     createRecoveryEmail,
-    createGeneralEmail
+    createGeneralEmail,
+    createPaymentConfirmationEmail,
 }
