@@ -8,6 +8,10 @@ const Payment = require('../models/payment')
 const PreferenceModel = require('../models/preference')
 const WebhookNotification = require('../models/webhookNotification')
 const { v4: uuidv4 } = require('uuid')
+const sgMail = require('@sendgrid/mail')
+const { createPaymentConfirmationEmail } = require('../utils/emailTemplates')
+
+sgMail.setApiKey(config.SENDGRID_API_KEY)
 
 const mercadopago = new MercadoPagoConfig({
     accessToken: config.MERCADOPAGO_ACCESS_TOKEN, 
@@ -152,6 +156,9 @@ paymentsRouter.post('/api/payments/webhook', async (req, res) => {
                     user.subscription = newSubscription
                     user.expiration = newExpiration
                     await user.save()
+
+                    const paymentEmail = createPaymentConfirmationEmail(user.name, user.email, newSubscription, newExpiration, external_reference)
+                    await sgMail.send(paymentEmail)
 
                     console.log(`Usuario ${user.email} actualizado: suscripción ${newSubscription}, vence el ${newExpiration}`)
                 }
