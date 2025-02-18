@@ -27,6 +27,8 @@ app.use(cors())
 app.use(express.json())
 app.use(middleware.requestLogger)
 
+app.set('trust proxy', 1)
+
 app.use('/', publicRouter)
 app.use('/', usersRouter)
 app.use('/', adminRouter)

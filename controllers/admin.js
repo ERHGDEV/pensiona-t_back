@@ -60,6 +60,7 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
                 date: payment.transactionDate,
                 status: payment.status,
                 external_reference: payment.external_reference,
+                id: payment._id
             }
         })
 
