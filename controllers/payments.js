@@ -142,25 +142,36 @@ paymentsRouter.post('/api/payments/webhook', async (req, res) => {
                 const user = await User.findOne({ email: userEmail })
 
                 if (user) {
-                    let newSubscription 
-                    const currentDate = new Date()
-                    let newExpiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
 
-                    // Verificamos el monto y asignamos la nueva suscripción
-                    if (transaction_amount === 199) {
-                        newSubscription = 'unlimited'
-                    } else if (transaction_amount === 149) {
-                        newSubscription = 'pro'
+                    if (transaction_amount === 50) {
+                        // Si el monto es de $50, actualizar la suscripción a 'unlimited'
+                        if (user.subscription === 'pro') {
+                            user.subscription = 'unlimited'
+                            await user.save()
+    
+                            console.log(`Usuario ${user.email} actualizado: suscripción unlimited`)
+                        }
+                    } else {
+                        let newSubscription 
+                        const currentDate = new Date()
+                        let newExpiration = new Date(currentDate.setDate(currentDate.getDate() + 30))
+
+                        // Verificamos el monto y asignamos la nueva suscripción
+                        if (transaction_amount === 199) {
+                            newSubscription = 'unlimited'
+                        } else if (transaction_amount === 149) {
+                            newSubscription = 'pro'
+                        }
+
+                        user.subscription = newSubscription
+                        user.expiration = newExpiration
+                        await user.save()
+
+                        const paymentEmail = createPaymentConfirmationEmail(user.name, user.email, newSubscription, newExpiration, external_reference)
+                        await sgMail.send(paymentEmail)
+
+                        console.log(`Usuario ${user.email} actualizado: suscripción ${newSubscription}, vence el ${newExpiration}`)
                     }
-
-                    user.subscription = newSubscription
-                    user.expiration = newExpiration
-                    await user.save()
-
-                    const paymentEmail = createPaymentConfirmationEmail(user.name, user.email, newSubscription, newExpiration, external_reference)
-                    await sgMail.send(paymentEmail)
-
-                    console.log(`Usuario ${user.email} actualizado: suscripción ${newSubscription}, vence el ${newExpiration}`)
                 }
             }
 
