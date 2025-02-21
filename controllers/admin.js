@@ -66,6 +66,7 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
                 payment.external_reference === pref.external_reference && payment.status === "approved"
             )
             return {
+                id: pref._id,
                 email: pref.email,
                 date_created: pref.date_created,
                 total_amount: pref.total_amount,
