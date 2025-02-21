@@ -42,7 +42,7 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
         // Buscar preferencias asociadas a los usuarios
         const preferences = await Preference.find({ email: { $in: emails } })
         const externalReferences = preferences.reduce((map, pref) => {
-            map[pref.external_reference] = pref.email
+            map[pref.external_reference] = pref
             return map
         }, {})
 
@@ -50,17 +50,26 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
         const payments = await Payment.find({ external_reference: { $in: Object.keys(externalReferences) } })
 
         // Mapear pagos con su respectivo usuario
-        const paymentHistory = payments.map(payment => {
-            const email = externalReferences[payment.external_reference]
-            const user = users.find(user => user.email === email)
+        const paymentHistory = payments.map(payment => ({
+            user: users.find(user => user.email === externalReferences[payment.external_reference]?.email)?.name || 'Desconocido',
+            email: externalReferences[payment.external_reference]?.email,
+            amount: payment.amount,
+            date: payment.transactionDate,
+            status: payment.status,
+            external_reference: payment.external_reference,
+            id: payment._id
+        }))
+
+        // Mapear preferencias con status basado en pagos aprobados
+        const preferencesWithStatus = preferences.map(pref => {
+            const hasApprovedPayment = payments.some(payment =>
+                payment.external_reference === pref.external_reference && payment.status === "approved"
+            )
             return {
-                user: user ? user.name : 'Desconocido',
-                email,
-                amount: payment.amount,
-                date: payment.transactionDate,
-                status: payment.status,
-                external_reference: payment.external_reference,
-                id: payment._id
+                email: pref.email,
+                date_created: pref.date_created,
+                total_amount: pref.total_amount,
+                status: hasApprovedPayment ? "approved" : "pending"
             }
         })
 
@@ -69,7 +78,7 @@ adminRouter.get('/api/admin', verifyToken, verifyAdmin, async (request, response
             lastLogin: loginMap[user.email] || null,
         }))
 
-        response.json({ users: usersWithLastLogin, payments: paymentHistory })
+        response.json({ users: usersWithLastLogin, payments: paymentHistory, preferences: preferencesWithStatus })
     } catch (error) {
         logger.error('Error fetching users and payments: ', error)
         response.status(500).json({ success: false, message: 'Error en el servidor' })
