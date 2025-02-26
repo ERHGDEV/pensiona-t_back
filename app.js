@@ -23,7 +23,14 @@ mongoose.connect(config.MONGODB_URI)
         logger.error('error connecting to MongoDB:', error.message)
     })
 
-app.use(cors())
+app.use(
+    cors({
+        origin: "https://www.pensiona-t.com", 
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+    })
+)
+
 app.use(express.json())
 app.use(middleware.requestLogger)
 
