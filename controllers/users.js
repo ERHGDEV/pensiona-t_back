@@ -11,6 +11,7 @@ const { generarEmailAleatorio } = require('../utils/emailUtils')
 const { consultarAfore } = require('../utils/consultarAfore')
 const { incrementUserCounter } = require('../utils/incrementUserCounter')
 const { verifyToken } = require('../utils/middleware')
+const batchAforeLookup = require('../utils/batchAforeLookup')
 
 sgMail.setApiKey(config.SENDGRID_API_KEY)
 
@@ -192,75 +193,69 @@ usersRouter.post('/api/afore-info-curp', verifyToken, async (req, res) => {
   }
 })
 
-// Consulta bulk de afore
+// Endpoint para hacer la consulta de AFORE por NSS y CURP
 usersRouter.post('/api/batch-afore-info', verifyToken, async (req, res) => {
   const user = await User.findById(req.user.id)
   if (user.subscription === 'free' || user.subscription === 'pro') {
     return res.status(403).json({
       error: 'No tienes permiso para realizar esta acción.',
-      message: 'No tienes permiso para realizar esta acción',
     })
   }
 
   const { nssArray } = req.body
-
   if (!Array.isArray(nssArray) || nssArray.length === 0 || nssArray.length > 100) {
     return res.status(400).json({
       error: 'El array de NSS debe contener entre 1 y 100 elementos.',
     })
   }
 
-  const results = []
-  let successfulQueries = 0
-
-  for (const nss of nssArray) {
-    const nssString = nss.toString()
-    if (nssString.length !== 11 || !/^\d+$/.test(nssString)) {
-      results.push({ nss, afore: 'Formato inválido' })
-      continue
-    }
-
-    const emailAleatorio = generarEmailAleatorio()
-    const url = `${config.URL_MASIVO}/${emailAleatorio}/nss/${nssString}`
-
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          Origin: 'https://www.aforeweb.com.mx',
-          Referer: 'https://www.aforeweb.com.mx/',
-        },
-      })
-
-      if (response.data.claveAfore !== null) {
-        results.push({ nss, afore: response.data.claveAfore })
-        successfulQueries++
-      } else {
-        results.push({ nss, afore: 'Intenta de nuevo mañana' })
-      }
-    } catch (error) {
-      logger.error(`Error al consultar AFORE para NSS ${nss}:`, error.message)
-      results.push({ nss, afore: 'Error en la consulta' })
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 100))
-  }
+  const { results, successfulQueries } = await batchAforeLookup({
+    type: 'nss',
+    itemsArray: nssArray,
+    userId: req.user.id,
+  })
 
   try {
-    const user = await User.findById(req.user.id)
-    if (user) {
-      user.aforesConsultadas = (user.aforesConsultadas || 0) + successfulQueries
-      await user.save()
-      logger.info(`Usuario ${req.user.id} consultó ${successfulQueries} AFOREs exitosamente`)
-    } else {
-      logger.error('Usuario no encontrado:', req.user.id)
-    }
+    user.aforesConsultadas = (user.aforesConsultadas || 0) + successfulQueries
+    await user.save()
+    logger.info(`Usuario ${req.user.id} consultó ${successfulQueries} AFOREs exitosamente`)
   } catch (error) {
     logger.error('Error al actualizar aforesConsultadas del usuario:', error)
   }
 
   res.json(results)
 })
+
+usersRouter.post('/api/batch-afore-info-curp', verifyToken, async (req, res) => {
+  const user = await User.findById(req.user.id)
+  if (user.subscription === 'free' || user.subscription === 'pro') {
+    return res.status(403).json({
+      error: 'No tienes permiso para realizar esta acción.',
+    })
+  }
+
+  const { curpArray } = req.body
+  if (!Array.isArray(curpArray) || curpArray.length === 0 || curpArray.length > 100) {
+    return res.status(400).json({
+      error: 'El array de CURP debe contener entre 1 y 100 elementos.',
+    })
+  }
+
+  const { results, successfulQueries } = await batchAforeLookup({
+    type: 'curp',
+    itemsArray: curpArray,
+    userId: req.user.id,
+  })
+
+  try {
+    user.aforesConsultadas = (user.aforesConsultadas || 0) + successfulQueries
+    await user.save()
+    logger.info(`Usuario ${req.user.id} consultó ${successfulQueries} AFOREs por CURP exitosamente`)
+  } catch (error) {
+    logger.error('Error al actualizar aforesConsultadas del usuario:', error)
+  }
+
+  res.json(results)
+})  
 
 module.exports = usersRouter
