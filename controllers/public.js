@@ -42,11 +42,19 @@ publicRouter.post('/api/login', limiter, async (request, response) => {
             return response.json({ success: false, message: 'Contraseña incorrecta' })
         }
 
-        user = await checkAndUpdateUserStatus(user)
-  
         if (user.token) {
-            await invalidatePreviousToken(user._id)
+            try {
+                const decoded = jwt.verify(user.token, config.JWT_SECRET)
+                if (decoded) {
+                    return response.json({ success: false, message: 'Ya tienes una sesión activa' })
+                }
+            } catch (error) {
+                logger.info(`Token anterior inválido o expirado para el usuario ${user.email}`)
+                // Permitimos iniciar sesión normalmente
+            }
         }
+
+        user = await checkAndUpdateUserStatus(user)
   
         const token = generateAccessToken(user)
         const refreshToken = generateRefreshToken(user)
